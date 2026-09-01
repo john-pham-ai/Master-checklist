@@ -1,0 +1,5 @@
+name = "master-checklist"
+enable_secrets = true
+
+[metadata]
+owner = "john.pham@applied.co"

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AD Smoke Test Checklist</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <h1 data-i18n="title">AD Smoke Test Checklist</h1>
+  <div class="controls">
+    <button id="theme-toggle" type="button">Light mode</button>
+    <select id="lang-select">
+      <option value="en">EN</option>
+      <option value="ja">JA</option>
+    </select>
+  </div>
+</header>
+
+<form id="checklist-form" method="post" action="/submit">
+  <section class="card">
+    <h2 data-i18n="section_run_info">Run Info</h2>
+    <div class="grid">
+      <label>
+        <span data-i18n="field_tag">Tag</span>
+        <input type="text" name="tag" required>
+      </label>
+      <label>
+        <span data-i18n="field_date">Date</span>
+        <input type="date" name="date" value="{{.Today}}" required>
+      </label>
+      <label>
+        <span data-i18n="field_vehicle">Vehicle</span>
+        <input type="text" name="vehicle" required>
+      </label>
+      <label>
+        <span data-i18n="field_test_engineer">Test Engineer</span>
+        <input type="text" name="test_engineer" required>
+      </label>
+      <label>
+        <span data-i18n="field_commit_hash">Commit Hash</span>
+        <input type="text" name="commit_hash" required>
+      </label>
+      <label>
+        <span data-i18n="field_slack_thread">Slack Thread</span>
+        <input type="url" name="slack_thread" placeholder="https://...">
+      </label>
+      <label>
+        <span data-i18n="field_run_id">Run ID</span>
+        <input type="text" name="run_id" required>
+      </label>
+      <label>
+        <span data-i18n="field_overall_result">Overall Result</span>
+        <select name="overall_result" required>
+          <option value="pass" data-i18n="result_pass">Pass</option>
+          <option value="fail" data-i18n="result_fail">Fail</option>
+          <option value="partial" data-i18n="result_partial">Partial</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="section_preflight">Preflight Checks</h2>
+    {{range .PreflightChecks}}
+    <div class="check-row">
+      <span class="check-label">{{.Label}}</span>
+      <span class="check-radios">
+        <label><input type="radio" name="result_{{.Key}}" value="pass" required> <span data-i18n="result_pass">Pass</span></label>
+        <label><input type="radio" name="result_{{.Key}}" value="fail"> <span data-i18n="result_fail">Fail</span></label>
+        <label><input type="radio" name="result_{{.Key}}" value="na"> <span data-i18n="result_na">N/A</span></label>
+      </span>
+      <input type="text" name="notes_{{.Key}}" class="notes" data-i18n-placeholder="notes_placeholder" placeholder="Notes">
+    </div>
+    {{end}}
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="section_engagement">Engagement Checks</h2>
+    {{range .EngagementChecks}}
+    <div class="check-row">
+      <span class="check-label">{{.Label}}</span>
+      <span class="check-radios">
+        <label><input type="radio" name="result_{{.Key}}" value="pass" required> <span data-i18n="result_pass">Pass</span></label>
+        <label><input type="radio" name="result_{{.Key}}" value="fail"> <span data-i18n="result_fail">Fail</span></label>
+        <label><input type="radio" name="result_{{.Key}}" value="na"> <span data-i18n="result_na">N/A</span></label>
+      </span>
+      <input type="text" name="notes_{{.Key}}" class="notes" data-i18n-placeholder="notes_placeholder" placeholder="Notes">
+    </div>
+    {{end}}
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="section_disengagement">Disengagement Checks</h2>
+    {{range .DisengagementChecks}}
+    <div class="check-row">
+      <span class="check-label">{{.Label}}</span>
+      <span class="check-radios">
+        <label><input type="radio" name="result_{{.Key}}" value="pass" required> <span data-i18n="result_pass">Pass</span></label>
+        <label><input type="radio" name="result_{{.Key}}" value="fail"> <span data-i18n="result_fail">Fail</span></label>
+        <label><input type="radio" name="result_{{.Key}}" value="na"> <span data-i18n="result_na">N/A</span></label>
+      </span>
+      <input type="text" name="notes_{{.Key}}" class="notes" data-i18n-placeholder="notes_placeholder" placeholder="Notes">
+    </div>
+    {{end}}
+  </section>
+
+  <button type="submit" class="submit-btn" data-i18n="submit">Submit &amp; Create Confluence Page</button>
+</form>
+
+<footer>
+  <a href="{{.GithubURL}}" target="_blank" rel="noopener" data-i18n="readme_link">README / Source</a>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
