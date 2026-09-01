@@ -130,7 +130,13 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			parentPageID = cfg.CandidateParentPageID
 		}
 
+		// Confluence page titles must be unique across the whole space, not just
+		// under one parent, so Candidate's month page needs a distinct title
+		// from Master's even though they land in different folders.
 		monthTitle := monthTitleFromDate(report.Date)
+		if isCandidate {
+			monthTitle += " (Candidate Testing)"
+		}
 		body := confluence.RenderStorageFormat(report)
 		title := confluence.PageTitle(report)
 
