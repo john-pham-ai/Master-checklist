@@ -1,5 +1,13 @@
 name = "master-checklist"
 enable_secrets = true
 
+allowed_usergroups = [
+  "okta-team-applied-fte@applied.co",
+  "okta-ext-frontier@applied.co",
+]
+
+[cloudrun.env_vars]
+CONFLUENCE_BOT_EMAIL = "john.pham@applied.co"
+
 [metadata]
 owner = "john.pham@applied.co"
