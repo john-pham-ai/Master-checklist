@@ -29,6 +29,9 @@ type RunReport struct {
 	Preflight     []CheckResult
 	Engagement    []CheckResult
 	Disengagement []CheckResult
+
+	DisengagementRunID           string
+	DisengagementClosedLoopRunID string
 }
 
 func esc(s string) string {
@@ -90,7 +93,18 @@ func RenderStorageFormat(r RunReport) string {
 
 	b.WriteString(checksTable("Preflight Checks", r.Preflight))
 	b.WriteString(checksTable("Engagement Checks", r.Engagement))
-	b.WriteString(checksTable("Disengagement Checks", r.Disengagement))
+
+	b.WriteString("<h2>Disengagement Checks</h2>\n")
+	b.WriteString("<table><tbody>\n")
+	fmt.Fprintf(&b, "<tr><th>Run ID</th><td>%s</td></tr>\n", esc(r.DisengagementRunID))
+	fmt.Fprintf(&b, "<tr><th>Closed Loop Run ID</th><td>%s</td></tr>\n", esc(r.DisengagementClosedLoopRunID))
+	b.WriteString("</tbody></table>\n")
+	b.WriteString("<table><thead><tr><th>Check</th><th>Result</th><th>Notes</th></tr></thead><tbody>\n")
+	for _, item := range r.Disengagement {
+		fmt.Fprintf(&b, "<tr><td>%s</td><td>%s</td><td>%s</td></tr>\n",
+			esc(item.Label), resultBadge(item.Result), esc(item.Notes))
+	}
+	b.WriteString("</tbody></table>\n")
 
 	return b.String()
 }

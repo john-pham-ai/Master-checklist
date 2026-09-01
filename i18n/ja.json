@@ -3,6 +3,9 @@
   "theme_toggle_light": "ライトモード",
   "theme_toggle_dark": "ダークモード",
   "section_run_info": "実行情報",
+  "field_test_type": "テスト種別",
+  "test_type_master": "マスターテスト",
+  "test_type_candidate": "候補テスト",
   "field_tag": "タグ",
   "field_date": "日付",
   "field_vehicle": "車両",
@@ -21,6 +24,8 @@
   "section_preflight": "プリフライトチェック",
   "section_engagement": "エンゲージメントチェック",
   "section_disengagement": "ディスエンゲージメントチェック",
+  "field_disengagement_run_id": "実行ID",
+  "field_disengagement_closed_loop_run_id": "クローズドループ実行ID",
   "notes_placeholder": "メモ",
   "submit": "送信してConfluenceページを作成",
   "readme_link": "README / ソース"

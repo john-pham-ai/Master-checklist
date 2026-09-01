@@ -39,9 +39,11 @@ type contentBody struct {
 }
 
 type createContentRequest struct {
-	Type   string `json:"type"`
-	Title  string `json:"title"`
-	Space  struct{ Key string `json:"key"` } `json:"space"`
+	Type  string `json:"type"`
+	Title string `json:"title"`
+	Space struct {
+		Key string `json:"key"`
+	} `json:"space"`
 	Ancestors []struct {
 		ID string `json:"id"`
 	} `json:"ancestors"`
@@ -96,7 +98,9 @@ func (c *Client) FindOrCreateMonthPage(monthTitle string) (string, error) {
 
 	req := createContentRequest{Type: "page", Title: monthTitle}
 	req.Space.Key = c.SpaceKey
-	req.Ancestors = []struct{ ID string `json:"id"` }{{ID: c.ParentPageID}}
+	req.Ancestors = []struct {
+		ID string `json:"id"`
+	}{{ID: c.ParentPageID}}
 	req.Body.Storage.Value = fmt.Sprintf("<p>Smoke test runs for %s.</p>", monthTitle)
 	req.Body.Storage.Representation = "storage"
 
@@ -112,7 +116,9 @@ func (c *Client) FindOrCreateMonthPage(monthTitle string) (string, error) {
 func (c *Client) CreateRunPage(parentID, title, storageBody string) (string, error) {
 	req := createContentRequest{Type: "page", Title: title}
 	req.Space.Key = c.SpaceKey
-	req.Ancestors = []struct{ ID string `json:"id"` }{{ID: parentID}}
+	req.Ancestors = []struct {
+		ID string `json:"id"`
+	}{{ID: parentID}}
 	req.Body.Storage.Value = storageBody
 	req.Body.Storage.Representation = "storage"
 

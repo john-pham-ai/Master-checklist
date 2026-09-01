@@ -3,6 +3,9 @@
   "theme_toggle_light": "Light mode",
   "theme_toggle_dark": "Dark mode",
   "section_run_info": "Run Info",
+  "field_test_type": "Test Type",
+  "test_type_master": "Master Testing",
+  "test_type_candidate": "Candidate Testing",
   "field_tag": "Tag",
   "field_date": "Date",
   "field_vehicle": "Vehicle",
@@ -21,6 +24,8 @@
   "section_preflight": "Preflight Checks",
   "section_engagement": "Engagement Checks",
   "section_disengagement": "Disengagement Checks",
+  "field_disengagement_run_id": "Run ID",
+  "field_disengagement_closed_loop_run_id": "Closed Loop Run ID",
   "notes_placeholder": "Notes",
   "submit": "Submit & Create Confluence Page",
   "readme_link": "README / Source"

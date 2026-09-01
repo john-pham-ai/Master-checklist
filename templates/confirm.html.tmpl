@@ -12,11 +12,14 @@
 </header>
 <div class="card" style="max-width:640px;margin:2rem auto;">
   <p>Confluence page created: <a href="{{.PageURL}}" target="_blank" rel="noopener">{{.PageURL}}</a></p>
+  {{if .ShowGatekeeper}}
   <p id="gatekeeper-status">Opening Gatekeeper in a new window&hellip;</p>
   <p><a id="gatekeeper-link" class="submit-btn" style="display:inline-block;text-decoration:none;text-align:center;" href="{{.GatekeeperURL}}" target="_blank" rel="noopener">Continue to Gatekeeper &rarr;</a></p>
+  {{end}}
   <p><a href="/">Back to checklist</a></p>
 </div>
 <script src="/static/app.js"></script>
+{{if .ShowGatekeeper}}
 <script>
   (function () {
     var popup = window.open({{.GatekeeperURL}}, "_blank", "noopener");
@@ -28,5 +31,6 @@
     }
   })();
 </script>
+{{end}}
 </body>
 </html>

@@ -23,6 +23,13 @@
     <h2 data-i18n="section_run_info">Run Info</h2>
     <div class="grid">
       <label>
+        <span data-i18n="field_test_type">Test Type</span>
+        <select name="test_type" id="test-type-select" required>
+          <option value="master" data-i18n="test_type_master">Master Testing</option>
+          <option value="candidate" data-i18n="test_type_candidate">Candidate Testing</option>
+        </select>
+      </label>
+      <label>
         <span data-i18n="field_tag">Tag</span>
         <input type="text" name="tag" required>
       </label>
@@ -99,6 +106,16 @@
 
   <section class="card">
     <h2 data-i18n="section_disengagement">Disengagement Checks</h2>
+    <div class="grid">
+      <label>
+        <span data-i18n="field_disengagement_run_id">Run ID</span>
+        <input type="text" name="disengagement_run_id">
+      </label>
+      <label>
+        <span data-i18n="field_disengagement_closed_loop_run_id">Closed Loop Run ID</span>
+        <input type="text" name="disengagement_closed_loop_run_id">
+      </label>
+    </div>
     {{range .DisengagementChecks}}
     <div class="check-row">
       <span class="check-label">{{.Label}}</span>

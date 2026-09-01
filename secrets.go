@@ -58,25 +58,27 @@ func (t *tokenSource) Get(ctx context.Context) (string, error) {
 }
 
 type config struct {
-	BaseURL      string
-	SpaceKey     string
-	ParentPageID string
-	BotEmail     string
-	Addr         string
-	DryRun       bool
-	Token        *tokenSource
+	BaseURL               string
+	SpaceKey              string
+	ParentPageID          string
+	CandidateParentPageID string
+	BotEmail              string
+	Addr                  string
+	DryRun                bool
+	Token                 *tokenSource
 }
 
 func loadConfig() config {
 	dryRun := os.Getenv("CONFLUENCE_DRY_RUN") == "true"
 	return config{
-		BaseURL:      envOrDefault("CONFLUENCE_BASE_URL", "https://appliedintuition.atlassian.net/wiki"),
-		SpaceKey:     envOrDefault("CONFLUENCE_SPACE_KEY", "NEURON"),
-		ParentPageID: envOrDefault("CONFLUENCE_PARENT_PAGE_ID", "2693234852"),
-		BotEmail:     os.Getenv("CONFLUENCE_BOT_EMAIL"),
-		Addr:         listenAddr(),
-		DryRun:       dryRun,
-		Token:        &tokenSource{dryRun: dryRun},
+		BaseURL:               envOrDefault("CONFLUENCE_BASE_URL", "https://appliedintuition.atlassian.net/wiki"),
+		SpaceKey:              envOrDefault("CONFLUENCE_SPACE_KEY", "NEURON"),
+		ParentPageID:          envOrDefault("CONFLUENCE_PARENT_PAGE_ID", "2693234852"),
+		CandidateParentPageID: envOrDefault("CONFLUENCE_CANDIDATE_PARENT_PAGE_ID", "2909896800"),
+		BotEmail:              os.Getenv("CONFLUENCE_BOT_EMAIL"),
+		Addr:                  listenAddr(),
+		DryRun:                dryRun,
+		Token:                 &tokenSource{dryRun: dryRun},
 	}
 }
 

@@ -101,6 +101,9 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			return
 		}
 
+		testType := r.FormValue("test_type")
+		isCandidate := testType == "candidate"
+
 		report := confluence.RunReport{
 			Tag:           r.FormValue("tag"),
 			Date:          r.FormValue("date"),
@@ -115,6 +118,14 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			Preflight:     collectChecks(r, preflightChecks),
 			Engagement:    collectChecks(r, engagementChecks),
 			Disengagement: collectChecks(r, disengagementChecks),
+
+			DisengagementRunID:           r.FormValue("disengagement_run_id"),
+			DisengagementClosedLoopRunID: r.FormValue("disengagement_closed_loop_run_id"),
+		}
+
+		parentPageID := cfg.ParentPageID
+		if isCandidate {
+			parentPageID = cfg.CandidateParentPageID
 		}
 
 		monthTitle := monthTitleFromDate(report.Date)
@@ -134,7 +145,7 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			http.Error(w, "Confluence credentials are not configured yet", http.StatusServiceUnavailable)
 			return
 		}
-		client := confluence.NewClient(cfg.BaseURL, cfg.SpaceKey, cfg.ParentPageID, cfg.BotEmail, token)
+		client := confluence.NewClient(cfg.BaseURL, cfg.SpaceKey, parentPageID, cfg.BotEmail, token)
 
 		monthPageID, err := client.FindOrCreateMonthPage(monthTitle)
 		if err != nil {
@@ -152,9 +163,10 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := confirmTemplate.Execute(w, struct {
-			PageURL       string
-			GatekeeperURL string
-		}{PageURL: pageURL, GatekeeperURL: gatekeeperURL}); err != nil {
+			PageURL        string
+			GatekeeperURL  string
+			ShowGatekeeper bool
+		}{PageURL: pageURL, GatekeeperURL: gatekeeperURL, ShowGatekeeper: !isCandidate}); err != nil {
 			log.Printf("confirm template execute error: %v", err)
 		}
 	}
