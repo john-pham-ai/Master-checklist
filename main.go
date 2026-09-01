@@ -22,7 +22,7 @@ var i18nFS embed.FS
 var pageTemplate = template.Must(template.ParseFS(templatesFS, "templates/index.html.tmpl"))
 var confirmTemplate = template.Must(template.ParseFS(templatesFS, "templates/confirm.html.tmpl"))
 
-const gatekeeperURL = "https://gatekeeper.experimental.apps.applied.dev/master-verification?vertical=trucking"
+const gatekeeperURL = "https://gatekeeper.experimental.apps.applied.dev/master-verification/trucking/new"
 
 // checkSpec describes one checklist line item rendered on the form.
 type checkSpec struct {
