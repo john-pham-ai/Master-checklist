@@ -9,6 +9,7 @@
   "field_test_engineer": "テストエンジニア",
   "field_commit_hash": "コミットハッシュ",
   "field_slack_thread": "Slackスレッド",
+  "slack_channel_hint": "スモークテストSlackチャンネル",
   "field_recording_link": "録画(Google Driveリンク)",
   "drive_folder_hint": "共有Driveフォルダ",
   "field_run_id": "実行ID",

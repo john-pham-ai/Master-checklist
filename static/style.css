@@ -75,8 +75,8 @@ form { max-width: 860px; margin: 0 auto; padding: 1.5rem; }
 
 .grid label, .grid select { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--muted); }
 
-.drive-hint { font-size: 0.75rem; color: var(--accent); text-decoration: none; }
-.drive-hint:hover { text-decoration: underline; }
+.field-hint { font-size: 0.75rem; color: var(--accent); text-decoration: none; }
+.field-hint:hover { text-decoration: underline; }
 
 .check-row {
   display: flex;
