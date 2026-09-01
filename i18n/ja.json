@@ -10,6 +10,7 @@
   "field_commit_hash": "コミットハッシュ",
   "field_slack_thread": "Slackスレッド",
   "field_recording_link": "録画(Google Driveリンク)",
+  "drive_folder_hint": "共有Driveフォルダ",
   "field_run_id": "実行ID",
   "field_overall_result": "総合結果",
   "result_pass": "合格",
