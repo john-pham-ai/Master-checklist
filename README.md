@@ -1,5 +1,7 @@
 # Master Checklist — AD Smoke Test → Confluence
 
+*[日本語版はこちら](README.ja.md)*
+
 A small web app (hosted on `apps.applied.dev`) for logging autonomous-driving smoke test
 runs. A test engineer fills out a checklist form and, on submit, the app creates a
 Confluence page recording the run under the [Master Testing](https://appliedintuition.atlassian.net/wiki/spaces/NEURON/pages/2693234852/Master+Testing)
