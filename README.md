@@ -11,7 +11,7 @@ header.
 
 ## Checklist fields
 
-- Tag, Date, Vehicle, Test Engineer, Commit Hash, Slack Thread, Run ID, Overall Result
+- Tag, Date, Vehicle, Test Engineer, Commit Hash, Slack Thread, Recording (Google Drive link), Run ID, Overall Result
 - Preflight: `run_syscheck` results, `check_timesync` results, software build & launch,
   health monitor healthy, logs recording in `/media/hotswap1/frontier/`
 - Engagement checks

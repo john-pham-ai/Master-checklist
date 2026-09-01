@@ -22,6 +22,7 @@ type RunReport struct {
 	TestEngineer  string
 	CommitHash    string
 	SlackThread   string
+	RecordingLink string
 	OverallResult string // "pass" | "fail" | "partial"
 	RunID         string
 
@@ -78,6 +79,11 @@ func RenderStorageFormat(r RunReport) string {
 		fmt.Fprintf(&b, "<tr><th>Slack Thread</th><td><a href=\"%s\">%s</a></td></tr>\n", esc(r.SlackThread), esc(r.SlackThread))
 	} else {
 		b.WriteString("<tr><th>Slack Thread</th><td></td></tr>\n")
+	}
+	if r.RecordingLink != "" {
+		fmt.Fprintf(&b, "<tr><th>Recording</th><td><a href=\"%s\">%s</a></td></tr>\n", esc(r.RecordingLink), esc(r.RecordingLink))
+	} else {
+		b.WriteString("<tr><th>Recording</th><td></td></tr>\n")
 	}
 	fmt.Fprintf(&b, "<tr><th>Overall Result</th><td>%s</td></tr>\n", resultBadge(r.OverallResult))
 	b.WriteString("</tbody></table>\n")

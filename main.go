@@ -10,7 +10,7 @@ import (
 	"github.com/john-pham-ai/Master-checklist/confluence"
 )
 
-//go:embed templates/index.html.tmpl
+//go:embed templates/index.html.tmpl templates/confirm.html.tmpl
 var templatesFS embed.FS
 
 //go:embed static
@@ -20,6 +20,9 @@ var staticFS embed.FS
 var i18nFS embed.FS
 
 var pageTemplate = template.Must(template.ParseFS(templatesFS, "templates/index.html.tmpl"))
+var confirmTemplate = template.Must(template.ParseFS(templatesFS, "templates/confirm.html.tmpl"))
+
+const gatekeeperURL = "https://gatekeeper.experimental.apps.applied.dev/master-verification?vertical=trucking"
 
 // checkSpec describes one checklist line item rendered on the form.
 type checkSpec struct {
@@ -105,6 +108,7 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			TestEngineer:  r.FormValue("test_engineer"),
 			CommitHash:    r.FormValue("commit_hash"),
 			SlackThread:   r.FormValue("slack_thread"),
+			RecordingLink: r.FormValue("recording_link"),
 			OverallResult: r.FormValue("overall_result"),
 			RunID:         r.FormValue("run_id"),
 
@@ -147,7 +151,12 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(`<p>Created: <a href="` + template.HTMLEscapeString(pageURL) + `">` + template.HTMLEscapeString(pageURL) + `</a></p><p><a href="/">Back</a></p>`))
+		if err := confirmTemplate.Execute(w, struct {
+			PageURL       string
+			GatekeeperURL string
+		}{PageURL: pageURL, GatekeeperURL: gatekeeperURL}); err != nil {
+			log.Printf("confirm template execute error: %v", err)
+		}
 	}
 }
 

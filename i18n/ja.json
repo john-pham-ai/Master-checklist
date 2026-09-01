@@ -9,6 +9,7 @@
   "field_test_engineer": "テストエンジニア",
   "field_commit_hash": "コミットハッシュ",
   "field_slack_thread": "Slackスレッド",
+  "field_recording_link": "録画(Google Driveリンク)",
   "field_run_id": "実行ID",
   "field_overall_result": "総合結果",
   "result_pass": "合格",
