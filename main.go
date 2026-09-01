@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"embed"
 	"html/template"
 	"log"
@@ -89,8 +88,6 @@ func collectChecks(r *http.Request, specs []checkSpec) []confluence.CheckResult 
 }
 
 func makeSubmitHandler(cfg config) http.HandlerFunc {
-	client := confluence.NewClient(cfg.BaseURL, cfg.SpaceKey, cfg.ParentPageID, cfg.BotEmail, cfg.APIToken)
-
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -127,6 +124,14 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			return
 		}
 
+		token, err := cfg.Token.Get(r.Context())
+		if err != nil {
+			log.Printf("failed to load Confluence token: %v", err)
+			http.Error(w, "Confluence credentials are not configured yet", http.StatusServiceUnavailable)
+			return
+		}
+		client := confluence.NewClient(cfg.BaseURL, cfg.SpaceKey, cfg.ParentPageID, cfg.BotEmail, token)
+
 		monthPageID, err := client.FindOrCreateMonthPage(monthTitle)
 		if err != nil {
 			log.Printf("FindOrCreateMonthPage error: %v", err)
@@ -155,11 +160,7 @@ func monthTitleFromDate(date string) string {
 }
 
 func main() {
-	ctx := context.Background()
-	cfg, err := loadConfig(ctx)
-	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
-	}
+	cfg := loadConfig()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleIndex)

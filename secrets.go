@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
@@ -13,11 +14,25 @@ import (
 // secret names with it for isolation (see README "Secrets" section).
 const appName = "master-checklist"
 
-// loadConfluenceToken fetches the confluence-token secret from Secret Manager.
-// When CONFLUENCE_DRY_RUN=true it is skipped entirely (see README "Local dev").
-func loadConfluenceToken(ctx context.Context) (string, error) {
-	if os.Getenv("CONFLUENCE_DRY_RUN") == "true" {
+// tokenSource lazily fetches and caches the Confluence API token. Fetching is
+// deferred until a request actually needs it, so the server can start (and
+// pass Cloud Run's health check) even before the secret has been set.
+type tokenSource struct {
+	dryRun bool
+
+	mu    sync.Mutex
+	cache string
+}
+
+func (t *tokenSource) Get(ctx context.Context) (string, error) {
+	if t.dryRun {
 		return "dry-run-token", nil
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.cache != "" {
+		return t.cache, nil
 	}
 
 	projectID := os.Getenv("PROJECT_ID")
@@ -37,7 +52,9 @@ func loadConfluenceToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("AccessSecretVersion: %w", err)
 	}
-	return string(result.Payload.Data), nil
+
+	t.cache = string(result.Payload.Data)
+	return t.cache, nil
 }
 
 type config struct {
@@ -45,27 +62,31 @@ type config struct {
 	SpaceKey     string
 	ParentPageID string
 	BotEmail     string
-	APIToken     string
 	Addr         string
 	DryRun       bool
+	Token        *tokenSource
 }
 
-func loadConfig(ctx context.Context) (config, error) {
-	cfg := config{
+func loadConfig() config {
+	dryRun := os.Getenv("CONFLUENCE_DRY_RUN") == "true"
+	return config{
 		BaseURL:      envOrDefault("CONFLUENCE_BASE_URL", "https://appliedintuition.atlassian.net/wiki"),
 		SpaceKey:     envOrDefault("CONFLUENCE_SPACE_KEY", "NEURON"),
 		ParentPageID: envOrDefault("CONFLUENCE_PARENT_PAGE_ID", "2693234852"),
 		BotEmail:     os.Getenv("CONFLUENCE_BOT_EMAIL"),
-		Addr:         envOrDefault("ADDR", ":8080"),
-		DryRun:       os.Getenv("CONFLUENCE_DRY_RUN") == "true",
+		Addr:         listenAddr(),
+		DryRun:       dryRun,
+		Token:        &tokenSource{dryRun: dryRun},
 	}
+}
 
-	token, err := loadConfluenceToken(ctx)
-	if err != nil {
-		return config{}, err
+// listenAddr honors Cloud Run's PORT env var, falling back to ADDR/8080 for
+// local development.
+func listenAddr() string {
+	if port := os.Getenv("PORT"); port != "" {
+		return ":" + port
 	}
-	cfg.APIToken = token
-	return cfg, nil
+	return envOrDefault("ADDR", ":8080")
 }
 
 func envOrDefault(key, def string) string {
