@@ -13,12 +13,16 @@ header.
 
 ## Checklist fields
 
-- Tag, Date, Vehicle, Test Engineer, Commit Hash, Slack Thread, Recording (Google Drive link), Run ID, Overall Result
+- Test Type (Master Testing / Candidate Testing), Tag (autocompletes from GitHub tags on
+  [Ext-Applied-Frontier/brain2](https://github.com/Ext-Applied-Frontier/brain2/tags) —
+  `scheduled-night` tags for Master, `candidate` tags for Candidate), Date, Vehicle,
+  Test Engineer, Commit Hash, Slack Thread, Recording (Google Drive link), Run ID,
+  Overall Result
 - Preflight: `run_syscheck` results, `check_timesync` results, software build & launch,
   health monitor healthy, logs recording in `/media/hotswap1/frontier/`
 - Engagement checks
-- Disengagement checks: steering left, steering right, accel, brake, cruise control,
-  e-stop, AD/MD button
+- Disengagement checks: Run ID, Closed Loop Run ID, steering left, steering right,
+  accel, brake, cruise control, e-stop, AD/MD button
 
 ## Local development
 
@@ -44,19 +48,25 @@ Then open http://localhost:8080.
 | `CONFLUENCE_SPACE_KEY` | `NEURON` | Space to create pages in |
 | `CONFLUENCE_PARENT_PAGE_ID` | `2693234852` | Master Testing page ID |
 | `CONFLUENCE_BOT_EMAIL` | — | Bot account email used for Basic Auth |
+| `CONFLUENCE_CANDIDATE_PARENT_PAGE_ID` | `2909896800` | Candidate Testing folder ID |
+| `GITHUB_TAG_REPO_OWNER` | `Ext-Applied-Frontier` | Owner of the repo to autocomplete tags from |
+| `GITHUB_TAG_REPO_NAME` | `brain2` | Repo to autocomplete tags from |
 | `ADDR` | `:8080` | HTTP listen address |
-| `CONFLUENCE_DRY_RUN` | `false` | Skip Secret Manager + Confluence calls, log instead |
+| `CONFLUENCE_DRY_RUN` | `false` | Skip Secret Manager + Confluence/GitHub calls, log instead |
 
 ## Secrets & deploy (apps-platform)
 
-`project.toml` has `enable_secrets = true`. Upload the Confluence API token once:
+`project.toml` has `enable_secrets = true`. Upload the Confluence API token and a GitHub
+personal access token (needs read access to `Ext-Applied-Frontier/brain2`) once:
 
 ```sh
 apps-platform app secret set confluence-token "<api-token>"
+apps-platform app secret set github-token "<personal-access-token>"
 apps-platform app deploy
 ```
 
-The app reads it back at `projects/$PROJECT_ID/secrets/master-checklist-confluence-token/versions/latest`
+The app reads these back at
+`projects/$PROJECT_ID/secrets/master-checklist-<name>-token/versions/latest`
 via the Secret Manager client — see `secrets.go`.
 
 ## Access control

@@ -14,19 +14,26 @@ import (
 // secret names with it for isolation (see README "Secrets" section).
 const appName = "master-checklist"
 
-// tokenSource lazily fetches and caches the Confluence API token. Fetching is
-// deferred until a request actually needs it, so the server can start (and
-// pass Cloud Run's health check) even before the secret has been set.
+// tokenSource lazily fetches and caches a named Secret Manager secret.
+// Fetching is deferred until a request actually needs it, so the server can
+// start (and pass Cloud Run's health check) even before the secret has been
+// set.
 type tokenSource struct {
-	dryRun bool
+	secretName string // e.g. "confluence-token"; apps-platform prefixes it with appName
+	dryRun     bool
+	dryRunVal  string
 
 	mu    sync.Mutex
 	cache string
 }
 
+func newTokenSource(secretName string, dryRun bool) *tokenSource {
+	return &tokenSource{secretName: secretName, dryRun: dryRun, dryRunVal: "dry-run-" + secretName}
+}
+
 func (t *tokenSource) Get(ctx context.Context) (string, error) {
 	if t.dryRun {
-		return "dry-run-token", nil
+		return t.dryRunVal, nil
 	}
 
 	t.mu.Lock()
@@ -46,7 +53,7 @@ func (t *tokenSource) Get(ctx context.Context) (string, error) {
 	}
 	defer client.Close()
 
-	secretPath := fmt.Sprintf("projects/%s/secrets/%s-confluence-token/versions/latest", projectID, appName)
+	secretPath := fmt.Sprintf("projects/%s/secrets/%s-%s/versions/latest", projectID, appName, t.secretName)
 	req := &secretmanagerpb.AccessSecretVersionRequest{Name: secretPath}
 	result, err := client.AccessSecretVersion(ctx, req)
 	if err != nil {
@@ -66,6 +73,10 @@ type config struct {
 	Addr                  string
 	DryRun                bool
 	Token                 *tokenSource
+
+	GithubOwner string
+	GithubRepo  string
+	GithubToken *tokenSource
 }
 
 func loadConfig() config {
@@ -78,7 +89,11 @@ func loadConfig() config {
 		BotEmail:              os.Getenv("CONFLUENCE_BOT_EMAIL"),
 		Addr:                  listenAddr(),
 		DryRun:                dryRun,
-		Token:                 &tokenSource{dryRun: dryRun},
+		Token:                 newTokenSource("confluence-token", dryRun),
+
+		GithubOwner: envOrDefault("GITHUB_TAG_REPO_OWNER", "Ext-Applied-Frontier"),
+		GithubRepo:  envOrDefault("GITHUB_TAG_REPO_NAME", "brain2"),
+		GithubToken: newTokenSource("github-token", dryRun),
 	}
 }
 

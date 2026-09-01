@@ -2,9 +2,11 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
 	"html/template"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/john-pham-ai/Master-checklist/confluence"
@@ -172,6 +174,72 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 	}
 }
 
+// tagCache caches the full tag list from GitHub for a short time, since the
+// list only changes when a new tag is pushed and the datalist may be
+// refreshed on every keystroke.
+type tagCache struct {
+	cfg config
+
+	mu        sync.Mutex
+	tags      []string
+	fetchedAt time.Time
+}
+
+const tagCacheTTL = 60 * time.Second
+
+var dryRunSampleTags = []string{
+	"v1.42.0-scheduled-night-2026-08-31",
+	"v1.41.0-scheduled-night-2026-08-30",
+	"v1.42.0-candidate-1",
+	"v1.42.0-candidate-2",
+}
+
+func (c *tagCache) Get(r *http.Request) ([]string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.cfg.DryRun {
+		return dryRunSampleTags, nil
+	}
+
+	if time.Since(c.fetchedAt) < tagCacheTTL && c.tags != nil {
+		return c.tags, nil
+	}
+
+	token, err := c.cfg.GithubToken.Get(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	tags, err := fetchGithubTags(c.cfg.GithubOwner, c.cfg.GithubRepo, token)
+	if err != nil {
+		return nil, err
+	}
+
+	c.tags = tags
+	c.fetchedAt = time.Now()
+	return tags, nil
+}
+
+func makeTagsHandler(cfg config) http.HandlerFunc {
+	cache := &tagCache{cfg: cfg}
+	return func(w http.ResponseWriter, r *http.Request) {
+		tags, err := cache.Get(r)
+		if err != nil {
+			log.Printf("fetchGithubTags error: %v", err)
+			http.Error(w, "failed to fetch tags", http.StatusBadGateway)
+			return
+		}
+
+		filterWord := "scheduled-night"
+		if r.URL.Query().Get("test_type") == "candidate" {
+			filterWord = "candidate"
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(filterTags(tags, filterWord))
+	}
+}
+
 func monthTitleFromDate(date string) string {
 	t, err := time.Parse("2006-01-02", date)
 	if err != nil {
@@ -186,6 +254,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleIndex)
 	mux.HandleFunc("/submit", makeSubmitHandler(cfg))
+	mux.HandleFunc("/api/tags", makeTagsHandler(cfg))
 	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
 	mux.Handle("/i18n/", http.FileServer(http.FS(i18nFS)))
 

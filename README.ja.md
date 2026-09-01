@@ -13,14 +13,16 @@ Confluenceページが作成されます。
 
 ## チェックリストの項目
 
-- タグ、日付、車両、テストエンジニア、コミットハッシュ、Slackスレッド、
+- テスト種別(マスターテスト/候補テスト)、タグ([Ext-Applied-Frontier/brain2](https://github.com/Ext-Applied-Frontier/brain2/tags)
+  のGitHubタグから自動補完 — マスターは `scheduled-night` タグ、候補は `candidate` タグ)、
+  日付、車両、テストエンジニア、コミットハッシュ、Slackスレッド、
   録画(Google Driveリンク)、実行ID、総合結果
 - プリフライトチェック: `run_syscheck` の結果、`check_timesync` の結果、
   ソフトウェアのビルドと起動、ヘルスモニターが正常であること、
   `/media/hotswap1/frontier/` にログが記録されていること
 - エンゲージメントチェック
-- ディスエンゲージメントチェック: ステアリング左、ステアリング右、
-  アクセル、ブレーキ、クルーズコントロール、e-stop、AD/MDボタン
+- ディスエンゲージメントチェック: 実行ID、クローズドループ実行ID、ステアリング左、
+  ステアリング右、アクセル、ブレーキ、クルーズコントロール、e-stop、AD/MDボタン
 
 ## ローカル開発
 
@@ -46,21 +48,26 @@ CONFLUENCE_DRY_RUN=true go run .
 | `CONFLUENCE_SPACE_KEY` | `NEURON` | ページを作成するスペース |
 | `CONFLUENCE_PARENT_PAGE_ID` | `2693234852` | Master Testing ページのID |
 | `CONFLUENCE_BOT_EMAIL` | — | Basic Auth に使うボットアカウントのメールアドレス |
+| `CONFLUENCE_CANDIDATE_PARENT_PAGE_ID` | `2909896800` | 候補テストのフォルダID |
+| `GITHUB_TAG_REPO_OWNER` | `Ext-Applied-Frontier` | タグ自動補完元のリポジトリのオーナー |
+| `GITHUB_TAG_REPO_NAME` | `brain2` | タグ自動補完元のリポジトリ名 |
 | `ADDR` | `:8080` | HTTPのリスンアドレス |
-| `CONFLUENCE_DRY_RUN` | `false` | Secret Managerとconfluence呼び出しをスキップし、ログ出力のみ行う |
+| `CONFLUENCE_DRY_RUN` | `false` | Secret Manager と Confluence/GitHub 呼び出しをスキップし、ログ出力のみ行う |
 
 ## シークレットとデプロイ(apps-platform)
 
-`project.toml` は `enable_secrets = true` に設定されています。Confluence APIトークンを
+`project.toml` は `enable_secrets = true` に設定されています。Confluence APIトークンと、
+GitHubのパーソナルアクセストークン(`Ext-Applied-Frontier/brain2` への読み取り権限が必要)を
 一度アップロードしてください:
 
 ```sh
 apps-platform app secret set confluence-token "<api-token>"
+apps-platform app secret set github-token "<personal-access-token>"
 apps-platform app deploy
 ```
 
-アプリはこのトークンを `secrets.go` 内で、
-`projects/$PROJECT_ID/secrets/master-checklist-confluence-token/versions/latest`
+アプリはこれらを `secrets.go` 内で、
+`projects/$PROJECT_ID/secrets/master-checklist-<name>-token/versions/latest`
 から Secret Manager クライアント経由で読み込みます。
 
 ## アクセス制御

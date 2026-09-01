@@ -83,4 +83,24 @@
   if (testTypeSelect) {
     testTypeSelect.addEventListener("change", applySlackHint);
   }
+
+  const tagList = document.getElementById("tag-suggestions");
+  function loadTagSuggestions() {
+    if (!testTypeSelect || !tagList) return;
+    fetch(`/api/tags?test_type=${encodeURIComponent(testTypeSelect.value)}`)
+      .then((r) => r.json())
+      .then((tags) => {
+        tagList.innerHTML = "";
+        tags.forEach((tag) => {
+          const option = document.createElement("option");
+          option.value = tag;
+          tagList.appendChild(option);
+        });
+      })
+      .catch((err) => console.error("failed to load tag suggestions", err));
+  }
+  loadTagSuggestions();
+  if (testTypeSelect) {
+    testTypeSelect.addEventListener("change", loadTagSuggestions);
+  }
 })();
