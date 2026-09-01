@@ -69,4 +69,18 @@
   if (langSelect) {
     langSelect.addEventListener("change", () => loadLang(langSelect.value));
   }
+
+  const testTypeSelect = document.getElementById("test-type-select");
+  const slackHint = document.getElementById("slack-channel-hint");
+  function applySlackHint() {
+    if (!testTypeSelect || !slackHint) return;
+    const href = testTypeSelect.value === "candidate"
+      ? slackHint.getAttribute("data-candidate-href")
+      : slackHint.getAttribute("data-master-href");
+    slackHint.setAttribute("href", href);
+  }
+  applySlackHint();
+  if (testTypeSelect) {
+    testTypeSelect.addEventListener("change", applySlackHint);
+  }
 })();
