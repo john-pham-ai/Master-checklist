@@ -92,6 +92,10 @@ type config struct {
 	GithubOwner string
 	GithubRepo  string
 	GithubToken *tokenSource
+
+	// EngineerGroups is the comma-separated list of Google/Okta groups whose
+	// members are suggested in the Test Engineer field.
+	EngineerGroups string
 }
 
 func loadConfig() config {
@@ -109,6 +113,8 @@ func loadConfig() config {
 		GithubOwner: envOrDefault("GITHUB_TAG_REPO_OWNER", "Ext-Applied-Frontier"),
 		GithubRepo:  envOrDefault("GITHUB_TAG_REPO_NAME", "brain2"),
 		GithubToken: newTokenSource("github-token", "GITHUB_TOKEN", dryRun),
+
+		EngineerGroups: envOrDefault("ENGINEER_GROUPS", defaultEngineerGroups),
 	}
 }
 

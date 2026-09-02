@@ -103,4 +103,22 @@
   if (testTypeSelect) {
     testTypeSelect.addEventListener("change", loadTagSuggestions);
   }
+
+  // Test Engineer suggestions: members of the access groups (see engineers.go).
+  // The field itself is pre-filled server-side with the signed-in user's name.
+  const engineerList = document.getElementById("engineer-suggestions");
+  if (engineerList) {
+    fetch("/api/engineers")
+      .then((r) => r.json())
+      .then((engineers) => {
+        engineerList.innerHTML = "";
+        engineers.forEach((e) => {
+          const option = document.createElement("option");
+          option.value = e.name;
+          option.label = e.email;
+          engineerList.appendChild(option);
+        });
+      })
+      .catch((err) => console.error("failed to load engineer suggestions", err));
+  }
 })();

@@ -24,6 +24,27 @@ header.
 - Disengagement checks: Run ID, Closed Loop Run ID, steering left, steering right,
   accel, brake, cruise control, e-stop, AD/MD button
 
+## Test Engineer autofill
+
+The Test Engineer field is pre-filled with the signed-in user's name (derived from the
+IAP `X-Goog-Authenticated-User-Email` header) and offers a dropdown of the members of the
+access groups (`ENGINEER_GROUPS`, default `okta-team-vehicle-testing`, `okta-ext-frontier`,
+`okta-ext-vehicle_operators-jp`). Names are derived from emails
+(`brandon.moyer@ext.applied.co` → `Brandon Moyer`).
+
+Membership is resolved in two layers (`engineers.go`):
+
+1. **Live** — the Cloud Identity API using the app's service account. This currently
+   fails (the SA has no visibility into these groups); it will start working, with no
+   code change, if the apps-platform team grants `master-checklist-sa` read access to
+   the groups.
+2. **Fallback** — `engineers_snapshot.json`, embedded at build time. Refresh it with
+   `scripts/refresh_engineers.sh` (uses your own gcloud login), commit, and redeploy.
+   Groups your account cannot read keep their existing entries — as of Sep 2026 only
+   `okta-team-vehicle-testing` is readable by ordinary members, so `okta-ext-frontier`
+   and `okta-ext-vehicle_operators-jp` are empty until a group owner runs the script or
+   their emails are added to the JSON by hand.
+
 ## Local development
 
 ```sh
@@ -60,6 +81,7 @@ CONFLUENCE_TOKEN="<atlassian-api-token>" GITHUB_TOKEN="<github-pat>" go run .
 | `GITHUB_TAG_REPO_NAME` | `brain2` | Repo to autocomplete tags from |
 | `ADDR` | `:8080` | HTTP listen address |
 | `CONFLUENCE_DRY_RUN` | `false` | Skip Secret Manager + Confluence/GitHub calls, log instead |
+| `ENGINEER_GROUPS` | vehicle-testing, ext-frontier, ext-vehicle_operators-jp | Groups whose members populate the Test Engineer dropdown |
 | `CONFLUENCE_TOKEN` | — | Local dev only: use this Atlassian API token instead of Secret Manager |
 | `GITHUB_TOKEN` | — | Local dev only: use this GitHub PAT instead of Secret Manager |
 

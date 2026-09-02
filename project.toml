@@ -5,6 +5,7 @@ allowed_usergroups = [
   "okta-team-applied-fte@applied.co",
   "okta-ext-frontier@applied.co",
   "okta-team-vehicle-testing@applied.co",
+  "okta-ext-vehicle_operators-jp@applied.co",
 ]
 
 [cloudrun.env_vars]

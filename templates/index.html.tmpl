@@ -44,7 +44,8 @@
       </label>
       <label>
         <span data-i18n="field_test_engineer">Test Engineer</span>
-        <input type="text" name="test_engineer" required>
+        <input type="text" name="test_engineer" list="engineer-suggestions" autocomplete="off" value="{{.CurrentEngineer}}" required>
+        <datalist id="engineer-suggestions"></datalist>
       </label>
       <label>
         <span data-i18n="field_commit_hash">Commit Hash</span>

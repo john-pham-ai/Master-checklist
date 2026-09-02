@@ -62,6 +62,7 @@ type formData struct {
 	DisengagementChecks []checkSpec
 	Today               string
 	GithubURL           string
+	CurrentEngineer     string // signed-in user's name (from IAP), pre-fills Test Engineer
 }
 
 const githubURL = "https://github.com/john-pham-ai/Master-checklist"
@@ -73,6 +74,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		DisengagementChecks: disengagementChecks,
 		Today:               time.Now().Format("2006-01-02"),
 		GithubURL:           githubURL,
+		CurrentEngineer:     currentEngineerName(r),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := pageTemplate.Execute(w, data); err != nil {
@@ -282,6 +284,7 @@ func main() {
 	mux.HandleFunc("/", handleIndex)
 	mux.HandleFunc("/submit", makeSubmitHandler(cfg))
 	mux.HandleFunc("/api/tags", makeTagsHandler(cfg))
+	mux.HandleFunc("/api/engineers", makeEngineersHandler(newEngineerSource(cfg.EngineerGroups, cfg.DryRun)))
 	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
 	mux.Handle("/i18n/", http.FileServer(http.FS(i18nFS)))
 
