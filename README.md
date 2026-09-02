@@ -35,6 +35,11 @@ tester's selection is diffed — never the whole history. The base tag can be ov
 browser posts the rendered JSON back with the form so the same summary lands at the top of
 the Confluence page, along with optional tester notes.
 
+Auto-fill: on load (and whenever the Test Type changes) the **Tag** is pre-filled with the
+newest build of that kind (newest `trucking-scheduled-night-*` for Master, newest
+`trucking-candidate-*` for Candidate) and **Compare against** with the one before it. Typing
+in either field turns its auto-fill off for that field until the Test Type changes again.
+
 It is written for non-technical readers:
 
 - Headline sentence: `Aug 31 → Sep 1: 92 changes in total — HMI 0 · Behavior 1 · Planner 4 …`

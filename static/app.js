@@ -92,7 +92,16 @@
   }
 
   const tagList = document.getElementById("tag-suggestions");
+  const tagInput = document.querySelector('input[name="tag"]');
   let knownTags = [];
+  let tagAuto = true; // Tag was filled by us (latest build), not typed by the tester
+
+  // Newest build of the selected kind: tags arrive newest-first; skip
+  // namespaced variants like "verified/..." when a plain tag exists.
+  function latestTag(tags) {
+    return tags.find((x) => !x.includes("/")) || tags[0] || "";
+  }
+
   function loadTagSuggestions() {
     if (!testTypeSelect || !tagList) return;
     fetch(`/api/tags?test_type=${encodeURIComponent(testTypeSelect.value)}`)
@@ -105,9 +114,22 @@
           option.value = tag;
           tagList.appendChild(option);
         });
-        maybeLoadDiff();
+        // Pre-fill the Tag with the latest build of this kind unless the
+        // tester already typed a tag of this kind themselves.
+        if (tagInput && (tagAuto || !knownTags.includes(tagInput.value.trim()))) {
+          const latest = latestTag(knownTags);
+          if (latest) {
+            tagInput.value = latest;
+            tagAuto = true;
+            diffBaseAuto = true; // a new head means a new automatic base
+          }
+        }
+        maybeLoadDiff(true);
       })
       .catch((err) => console.error("failed to load tag suggestions", err));
+  }
+  if (tagInput) {
+    tagInput.addEventListener("input", () => { tagAuto = false; diffBaseAuto = true; });
   }
   loadTagSuggestions();
   if (testTypeSelect) {
@@ -115,8 +137,11 @@
   }
 
   // ---- Master diff summary (changes since the previous build of the same kind) ----
-  const tagInput = document.querySelector('input[name="tag"]');
   const diffBase = document.getElementById("diff-base");
+  let diffBaseAuto = true; // Compare-against was filled by us (previous build), not typed
+  if (diffBase) {
+    diffBase.addEventListener("input", () => { diffBaseAuto = diffBase.value.trim() === ""; });
+  }
   const diffBaseList = document.getElementById("diff-base-suggestions");
   const diffStatus = document.getElementById("diff-status");
   const diffResults = document.getElementById("diff-results");
@@ -250,7 +275,9 @@
     if (!tagInput || !diffResults) return;
     const head = tagInput.value.trim();
     if (!head || (!force && !knownTags.includes(head))) return;
-    const base = diffBase ? diffBase.value.trim() : "";
+    // When the base is automatic, let the server pick the previous build of
+    // the same kind and show the result in the field.
+    const base = diffBase && !diffBaseAuto ? diffBase.value.trim() : "";
     const key = head + "|" + base;
     if (!force && key === lastDiffKey) return;
     lastDiffKey = key;
@@ -267,7 +294,7 @@
           setDiffStatus(t("diff_error", "Could not load the diff:") + " " + (data.error || status), "error");
           return;
         }
-        if (diffBase && !diffBase.value) diffBase.placeholder = data.base;
+        if (diffBase && diffBaseAuto) diffBase.value = data.base;
         setDiffStatus(`${t("diff_builds", "Builds compared")}: ${data.base} → ${data.head}`, "");
         renderDiff(data);
         if (diffJson) diffJson.value = JSON.stringify(data);
@@ -284,6 +311,8 @@
   }
   if (diffBase) diffBase.addEventListener("change", () => maybeLoadDiff(true));
   if (diffReload) diffReload.addEventListener("click", () => maybeLoadDiff(true));
+  // Switching Master <-> Candidate re-fills the Tag with that kind's latest build (see loadTagSuggestions).
+  if (testTypeSelect) testTypeSelect.addEventListener("change", () => { tagAuto = true; diffBaseAuto = true; });
 
   // Test Engineer suggestions: members of the access groups (see engineers.go).
   // The field itself is pre-filled server-side with the signed-in user's name.
