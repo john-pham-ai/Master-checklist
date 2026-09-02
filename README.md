@@ -35,22 +35,58 @@ tester's selection is diffed — never the whole history. The base tag can be ov
 browser posts the rendered JSON back with the form so the same summary lands at the top of
 the Confluence page, along with optional tester notes.
 
-Auto-fill: on load (and whenever the Test Type changes) the **Tag** is pre-filled with the
-newest build of that kind (newest `trucking-scheduled-night-*` for Master, newest
-`trucking-candidate-*` for Candidate) and **Compare against** with the one before it. Typing
-in either field turns its auto-fill off for that field until the Test Type changes again.
+Auto-fill: the page opens on **Master Testing** and loads its builds. The **Tag** dropdown
+lists every build of the selected kind, newest first (`trucking-scheduled-night-*` for Master,
+`trucking-candidate-*` for Candidate) with the newest pre-selected; **Compare against** lists
+the earlier builds of the same kind with the one just before it pre-selected. Both are plain
+dropdowns, so the full list is always one click away; changing the Test Type clears and
+reloads both.
 
-It is written for non-technical readers:
+It is written so that a 10-year-old could follow it:
 
-- Headline sentence: `Aug 31 → Sep 1: 92 changes in total — HMI 0 · Behavior 1 · Planner 4 …`
-- Each area shows a one-line explanation ("what the driver sees and hears") and lists only
-  **described** changes as a clean headline (Jira key, `(#PR)` and `[Team]` tags stripped) plus
-  the first line of the PR description; ticket/PR/tags/paths sit behind a **Details** toggle.
+- Headline: **"92 changes since the previous build (Aug 31 → Sep 1)"** with a link to the full
+  GitHub compare.
+- One row per area — 🖥️ HMI, 🚦 Behavior, 🗺️ Planner, 🔮 Prediction, 🛠️ Bug fixes — with a
+  count badge and one plain sentence ("2 changes to what the driver sees and hears on the
+  screen." / "The truck makes the same driving decisions as before."), followed by one simple
+  bullet per described change. Without the model the sentences come from fixed templates
+  (`i18n/*.json` `simple_*` keys, `confluence/render.go` `simpleSentence`) and the bullets are
+  the cleaned change headlines; with Vertex AI access (`roles/aiplatform.user`) Gemini rewrites
+  the sentences, bullets and an overall "In short" line in simple English **and** Japanese
+  (`translator.simplifyDiff`, JSON output, cached with the diff).
 - Automated or housekeeping commits (`Vehicle OS Change` Copybara syncs, `[auto]` bumps,
-  lockfile updates) are never listed — they are **counted**: "N more automated or undescribed
-  changes also touched this area".
-- Everything outside the five areas is a single count line: "N other changes outside these
-  areas (M automated system updates) — Full list on GitHub".
+  lockfile updates) are never listed — they are **counted** ("3 of these are small automatic
+  updates without a description").
+- Everything outside the five areas is one line: "86 other changes that don't affect these
+  areas (70 of them are automatic system updates)".
+- Every change is tagged with **where it runs**, from the paths it touched
+  (`classifyImpact` in `diff.go`; any driver-facing file wins, then driving, then internal):
+  | Tag | Meaning | Paths |
+  |---|---|---|
+  | 👀 you'll see it | driver-facing | `onroad/hmi`, `trucking/hmi`, `vehicle_os/hmi`, `trucking/start_stack`, `trucking/health_monitor` |
+  | 🚚 changes how it drives | autonomous behavior | `onroad/behavior`, `onroad/cmas`, `onroad/controls`, `onroad/parking`, `onroad/remote_assistance`, `onroad/mission_manager`, `onroad/config`, `trucking/planning`, `trucking/control`, `trucking/fallback`, `trucking/mrm_arbiter`, `trucking/remote_*`, `trucking/vehicle_interfaces`, `trucking/config`, `trucking/mapping`, `common/behavior`, `common/controls_arbiter`, `common/mission_manager`, `common/drive_by_wire`, `common/adp_map_tiles` |
+  | ⚙️ on the truck, hard to spot | everything else under `onroad/`, `trucking/`, `common/`, `vehicle_os/` (perception, localization, ML, drivers, OS…) | |
+  | 💻 not on the truck | tools, simulation, offboard, dashboards, CI, scripts, repository rules, `.buildkite`, `docker`, `cloud/`; tests (`*_test.*`, `/tests/`), docs (`*.md`) and `BUILD`/`.bzl` files are neutral | |
+  **💻 changes are ignored** — they never appear in an area, only as a footnote count
+  ("35 tools, simulation and test changes are not shown"). The headline counts on-truck
+  changes: "57 changes on the truck since the previous build — 10 you might notice".
+- **Behavior-affecting changes (👀/🚚) get extra care.** Each is a highlighted card with:
+  a **plain-words title** (`plainTitle` in `glossary.go` splits identifiers and swaps jargon —
+  "Reuse waypoints in LaneBoundaryExcursionCost::ComputeCost" → "Reuse points along the
+  planned path in lane-edge penalty score"), the engineer's original title, a **"What this
+  means"** note derived from the kind of change (`changeKind`: fix / revert / speedup / tuning /
+  refactor / new / removal — e.g. speed-ups "are meant to drive exactly the same"; tuning "may
+  react a little differently"), and **"The engineer wrote:"** — the first sentences of the PR
+  description (`extractExcerpt`). Hard-to-spot (⚙️) changes are a compact one-line list.
+- **⚠️ Flags.** A behavior-affecting change with no PR description is flagged "No description —
+  ask the author what this changes before testing", and each area flags automatic updates that
+  touched driving or driver-facing code ("2 automatic updates touched driving code with no
+  description"). Extend the glossary in `glossary.go` as new jargon shows up.
+- The same tags, kinds and excerpts are fed to Gemini, which is asked to spend two sentences on
+  each behavior-affecting change ("You might notice: …") and to flag missing descriptions.
+- The engineering view (headlines with PR/Jira links, first PR sentence, touched directories,
+  impact tag) is still there behind **Show technical details**; on Confluence it sits in a
+  collapsed *Technical details* expand block.
 
 Classification is by the paths each commit touched (one GitHub call per commit, up to 200,
 cached 30 min) plus keywords in the title:

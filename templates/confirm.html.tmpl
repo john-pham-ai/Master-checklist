@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Smoke Test Submitted</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v={{.AssetVersion}}">
 </head>
 <body>
 <header class="topbar">
@@ -18,7 +18,7 @@
   {{end}}
   <p><a href="/">Back to checklist</a></p>
 </div>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v={{.AssetVersion}}"></script>
 {{if .ShowGatekeeper}}
 <script>
   (function () {

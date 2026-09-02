@@ -53,7 +53,8 @@ func (s *feedbackService) handleForm(w http.ResponseWriter, r *http.Request) {
 	err := feedbackTemplate.Execute(w, struct {
 		CurrentEmail string
 		FeedbackTo   string
-	}{CurrentEmail: currentUserEmail(r), FeedbackTo: s.cfg.FeedbackTo})
+		AssetVersion string
+	}{CurrentEmail: currentUserEmail(r), FeedbackTo: s.cfg.FeedbackTo, AssetVersion: assetVersion})
 	if err != nil {
 		log.Printf("feedback template execute error: %v", err)
 	}

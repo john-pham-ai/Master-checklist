@@ -80,42 +80,96 @@ func (t *translator) toEnglish(ctx context.Context, text string) (string, error)
 	return t.generate(ctx, translatePrompt+text)
 }
 
-const diffSummaryPrompt = "You explain software changes to vehicle test operators who are not software engineers. " +
-	"Below are the changes between last night's build and tonight's build of the self-driving truck software, grouped by area. " +
-	"Write at most 6 short plain-English bullet points (start each with '- '), one per area that changed, in this order: HMI (what the driver sees and hears), Behavior (driving decisions), Planner (path and speed), Prediction (other road users), bug fixes. " +
-	"Say what a driver or tester might notice. Avoid jargon, code names, file paths, ticket numbers and PR numbers. Do not invent details; if a change is unclear, say 'minor internal change'. No headings, no preamble.\n\n"
+const simplifyPrompt = `You explain software changes to a 10-year-old. Below are tonight's changes to a self-driving truck's software, grouped by area:
+- hmi: the screen and sounds the driver sees and hears
+- behavior: how the truck decides what to do (slow down, stop, change lanes, let others pass)
+- planner: how the truck plans where to drive and how fast
+- prediction: how the truck guesses what other cars and people will do next
+- fixes: problems that were found and repaired, or changes that were undone
 
-// summarizeDiff produces a short narrative of a categorized nightly diff.
-func (t *translator) summarizeDiff(ctx context.Context, d *diffSummary) (string, error) {
+Return ONLY JSON, no markdown, with exactly this shape:
+{"en":{"overall":"one or two short friendly sentences about tonight's build",
+       "areas":{"hmi":{"sentence":"one simple sentence saying how many things changed here and what they are about","bullets":["one very simple line per change, under 12 words"]},
+                "behavior":{"sentence":"...","bullets":[]},"planner":{"sentence":"...","bullets":[]},"prediction":{"sentence":"...","bullets":[]},"fixes":{"sentence":"...","bullets":[]}}},
+ "ja":{ the same structure written in simple, friendly Japanese }}
+
+Each change is tagged with where it runs (changes that are NOT on the truck have already been removed):
+- [visible] = on the truck and easy to spot (driver screen, sounds, start-up, health monitor)
+- [driving] = on the truck and changes how it drives — a tester might notice while driving
+- [internal] = on the truck but hard to spot (sensing, positioning, models, drivers, vehicle OS)
+Each change also has a kind (fix, revert, speedup, tuning, refactor, new, removal) and, when available, an excerpt of the engineer's description.
+
+Take extra care with [visible] and [driving] changes: in TWO short sentences explain what the truck (or the driver's screen) will do differently and in which situation a tester could notice it, based only on the excerpt. Start those bullets with "You'll see it: " or "You might notice: ". For [internal] changes use one line starting with "Behind the scenes: ".
+If a [visible] or [driving] change has no excerpt, write exactly: "You might notice: (no description — ask the author before testing) " followed by the plain title.
+
+Rules: use very simple everyday words a 10-year-old knows; no jargon, code names, file paths, ticket numbers or PR numbers. If an area has no changes, say so in one friendly sentence and give an empty bullets list. Never invent details. Mention counts of automatic updates only as "small automatic updates".
+
+`
+
+// simplifyDiff asks the model for the plain-language rendering (English and
+// Japanese) of a categorized diff.
+func (t *translator) simplifyDiff(ctx context.Context, d *diffSummary) (map[string]simpleLang, error) {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Compare: %s -> %s (%d changes, %d of them outside the areas below)\n\n", d.Base, d.Head, d.TotalCommits, d.OtherCount)
+	fmt.Fprintf(&b, "Builds: %s -> %s. %d changes run on the truck (%d tools/simulation/test changes were removed). %d on-truck changes are outside the areas below (%d are automatic system updates).\n\n",
+		d.Base, d.Head, d.OnTruck, d.Ignored, d.OtherCount, d.OtherAutomated)
 	for _, c := range d.Categories {
-		if len(c.Items) == 0 && c.Undescribed == 0 {
-			continue
-		}
-		fmt.Fprintf(&b, "## %s\n", c.Label)
+		fmt.Fprintf(&b, "## %s (%d changes; %d automatic/undescribed, of which %d touched driving or driver-facing code; %d visible, %d driving, %d internal)\n",
+			c.Key, len(c.Items)+c.Undescribed, c.Undescribed, c.UndescribedDriving, c.Impact[impactVisible], c.Impact[impactDriving], c.Impact[impactInternal])
 		for i, it := range c.Items {
 			if i == 40 {
 				fmt.Fprintf(&b, "- (+%d more)\n", len(c.Items)-40)
 				break
 			}
-			fmt.Fprintf(&b, "- %s", it.Headline)
-			if it.Summary != "" {
-				fmt.Fprintf(&b, " — %s", it.Summary)
+			fmt.Fprintf(&b, "- [%s][%s] %s", impactKey(it.Impact), it.Kind, it.Headline)
+			if it.PlainTitle != "" && it.PlainTitle != it.Headline {
+				fmt.Fprintf(&b, " (plain: %s)", it.PlainTitle)
+			}
+			if it.Excerpt != "" {
+				fmt.Fprintf(&b, "\n  excerpt: %s", it.Excerpt)
+			} else if affectsTruckBehavior(it.Impact) {
+				b.WriteString("\n  excerpt: (none)")
 			}
 			b.WriteString("\n")
 		}
-		if c.Undescribed > 0 {
-			fmt.Fprintf(&b, "- (%d automated or undescribed changes also touched this area)\n", c.Undescribed)
-		}
 		b.WriteString("\n")
 	}
-	return t.generate(ctx, diffSummaryPrompt+b.String())
+	raw, err := t.generateJSON(ctx, simplifyPrompt+b.String())
+	if err != nil {
+		return nil, err
+	}
+	return parseSimpleJSON(raw)
+}
+
+// parseSimpleJSON decodes the model's JSON (tolerating a ```json fence) and
+// checks that at least the English rendering is present.
+func parseSimpleJSON(raw string) (map[string]simpleLang, error) {
+	s := strings.TrimSpace(raw)
+	s = strings.TrimPrefix(s, "```json")
+	s = strings.TrimPrefix(s, "```")
+	s = strings.TrimSuffix(s, "```")
+	var out map[string]simpleLang
+	if err := json.Unmarshal([]byte(strings.TrimSpace(s)), &out); err != nil {
+		return nil, fmt.Errorf("model returned invalid JSON: %w", err)
+	}
+	en, ok := out["en"]
+	if !ok || len(en.Areas) == 0 {
+		return nil, fmt.Errorf("model JSON has no English areas")
+	}
+	return out, nil
 }
 
 // generate sends a single-turn prompt to Gemini on Vertex AI and returns the
 // text of the first candidate.
 func (t *translator) generate(ctx context.Context, prompt string) (string, error) {
+	return t.generateWith(ctx, prompt, false)
+}
+
+// generateJSON is generate with the model constrained to emit JSON.
+func (t *translator) generateJSON(ctx context.Context, prompt string) (string, error) {
+	return t.generateWith(ctx, prompt, true)
+}
+
+func (t *translator) generateWith(ctx context.Context, prompt string, jsonMode bool) (string, error) {
 	if t.disabled {
 		return "", fmt.Errorf("translation disabled")
 	}
@@ -126,12 +180,16 @@ func (t *translator) generate(ctx context.Context, prompt string) (string, error
 
 	u := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
 		t.location, t.project, t.location, t.model)
+	genCfg := map[string]interface{}{"temperature": 0}
+	if jsonMode {
+		genCfg["responseMimeType"] = "application/json"
+	}
 	reqBody := map[string]interface{}{
 		"contents": []map[string]interface{}{{
 			"role":  "user",
 			"parts": []map[string]string{{"text": prompt}},
 		}},
-		"generationConfig": map[string]interface{}{"temperature": 0},
+		"generationConfig": genCfg,
 	}
 	payload, err := json.Marshal(reqBody)
 	if err != nil {

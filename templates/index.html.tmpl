@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AD Smoke Test Checklist</title>
-<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style.css?v={{.AssetVersion}}">
 </head>
 <body>
 <header class="topbar">
@@ -25,8 +25,9 @@
     <div class="grid">
       <label>
         <span data-i18n="field_diff_base">Compare against</span>
-        <input type="text" name="diff_base" id="diff-base" list="diff-base-suggestions" autocomplete="off" data-i18n-placeholder="diff_base_placeholder" placeholder="auto: the previous build of the same kind">
-        <datalist id="diff-base-suggestions"></datalist>
+        <select name="diff_base" id="diff-base" disabled>
+          <option value="" data-i18n="tags_loading">Loading builds…</option>
+        </select>
       </label>
       <label>
         <span>&nbsp;</span>
@@ -36,7 +37,7 @@
         </span>
       </label>
     </div>
-    <p id="diff-status" class="muted small" data-i18n="diff_hint">The latest build is pre-selected as the Tag and compared with the one before it. Change either field if you tested a different build.</p>
+    <p id="diff-status" class="muted small">The latest build of the selected test type is pre-selected and compared with the one before it. You can change either dropdown.</p>
     <div id="diff-results"></div>
     <label class="stack">
       <span data-i18n="field_diff_notes">Notes on the changes (optional — included on the Confluence page)</span>
@@ -51,14 +52,15 @@
       <label>
         <span data-i18n="field_test_type">Test Type</span>
         <select name="test_type" id="test-type-select" required>
-          <option value="master" data-i18n="test_type_master">Master Testing</option>
+          <option value="master" selected data-i18n="test_type_master">Master Testing</option>
           <option value="candidate" data-i18n="test_type_candidate">Candidate Testing</option>
         </select>
       </label>
       <label>
         <span data-i18n="field_tag">Tag</span>
-        <input type="text" name="tag" list="tag-suggestions" autocomplete="off" required>
-        <datalist id="tag-suggestions"></datalist>
+        <select name="tag" id="tag-select" required disabled>
+          <option value="" data-i18n="tags_loading">Loading builds…</option>
+        </select>
       </label>
       <label>
         <span data-i18n="field_date">Date</span>
@@ -165,6 +167,6 @@
   <a href="{{.GithubURL}}" target="_blank" rel="noopener" data-i18n="readme_link">README / Source</a>
 </footer>
 
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v={{.AssetVersion}}"></script>
 </body>
 </html>

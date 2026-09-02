@@ -63,6 +63,102 @@ const (
 	vehicleOSTitle      = "Vehicle OS Change"
 )
 
+// Impact: does a change run on the truck, and would a tester notice it?
+const (
+	impactVisible  = "visible"  // driver-facing: HMI screens/sounds, start-up, health monitor
+	impactDriving  = "driving"  // changes how the truck drives: behavior, planner, controls, fallback, maps, vehicle config
+	impactInternal = "internal" // runs on the truck but hard to spot: perception, localization, ML, drivers, Vehicle OS
+	impactOff      = "off"      // not on the truck: tools, simulation, offboard, dashboards, CI, tests, docs
+	impactUnknown  = ""         // touched files not known (title-only classification)
+)
+
+// impactOrder is the display/priority order: a commit with any driver-visible
+// file is "visible", else any driving file -> "driving", etc.
+var impactOrder = []string{impactVisible, impactDriving, impactInternal, impactOff}
+
+var impactPrefixes = map[string][]string{
+	impactVisible: {
+		"onroad/hmi/", "trucking/hmi/", "vehicle_os/hmi/", "trucking/start_stack/", "trucking/health_monitor/",
+	},
+	impactDriving: {
+		"onroad/behavior/", "onroad/cmas/", "onroad/controls/", "onroad/parking/", "onroad/remote_assistance/", "onroad/mission_manager/", "onroad/config/",
+		"trucking/planning/", "trucking/control/", "trucking/fallback/", "trucking/mrm_arbiter/", "trucking/remote_assistance/", "trucking/remote_bridge/",
+		"trucking/vehicle_interfaces/", "trucking/config/", "trucking/mapping/",
+		"common/behavior/", "common/controls_arbiter/", "common/mission_manager/", "common/drive_by_wire/", "common/adp_map_tiles/",
+	},
+	impactOff: {
+		".buildkite/", ".github/", ".claude/", ".cursor/", "docker/", "cloud/",
+		"onroad/tools/", "onroad/data_collection/", "onroad/ml_optimization/", "onroad/visualization/", "onroad/repository_rules/",
+		"trucking/tools/", "trucking/offboard/", "trucking/simulation/", "trucking/dashboards/", "trucking/ci/", "trucking/scripts/",
+		"trucking/repository_rules/", "trucking/fuzz_tester/", "trucking/dead_code/", "trucking/bazel", "trucking/docker/", "trucking/.config/",
+		"common/tools/", "common/offboard/", "common/simulation/", "common/flyte/", "common/data_engine/", "common/dora/",
+		"common/sim_trace_uploader/", "common/staging/", "common/orchestration/", "common/foxglove/", "common/data_utils/",
+		"common/disk_dump_utils/", "common/repository_rules/",
+		"vehicle_os/tools/", "vehicle_os/docker/", "vehicle_os/repository_rules/", "vehicle_os/.config/",
+	},
+}
+
+var testPathRe = regexp.MustCompile(`(_test\.[a-z]+$|/tests?/|/testdata/|_tests?\.py$|\.md$|/BUILD(\.bazel)?$|/WORKSPACE|\.bzl$|MODULE\.bazel)`)
+
+// impactForPath classifies one file; "" means neutral (tests, docs, build glue).
+func impactForPath(p string) string {
+	if testPathRe.MatchString(p) {
+		return impactUnknown
+	}
+	best, bestLen := "", 0
+	for _, class := range impactOrder {
+		for _, pre := range impactPrefixes[class] {
+			if strings.HasPrefix(p, pre) && len(pre) > bestLen {
+				best, bestLen = class, len(pre)
+			}
+		}
+	}
+	if best != "" {
+		return best
+	}
+	// Anything else under the on-vehicle trees runs on the truck but is not driver-facing.
+	for _, tree := range []string{"onroad/", "trucking/", "common/", "vehicle_os/"} {
+		if strings.HasPrefix(p, tree) {
+			return impactInternal
+		}
+	}
+	return impactOff
+}
+
+// simTitleRe spots simulation-only work whose files live in generic on-vehicle
+// trees (e.g. a "[Sim] ... LogSim" change under trucking/autonomy_platform).
+var simTitleRe = regexp.MustCompile(`(?i)(\[sim\]|\blogsim\b|\bsimulation\b|\bsim[- ]only\b|\bresim\b)`)
+
+// refineImpact downgrades an "internal" verdict to "off" when the title makes
+// clear the change is simulation tooling. Visible/driving verdicts are kept.
+func refineImpact(impact, title string) string {
+	if impact == impactInternal && simTitleRe.MatchString(title) {
+		return impactOff
+	}
+	return impact
+}
+
+// classifyImpact picks the commit's impact from its files by priority
+// (visible > driving > internal > off). Neutral files are ignored; a commit
+// with only neutral files is "off" (tests/docs/build glue).
+func classifyImpact(paths []string) string {
+	seen := map[string]bool{}
+	for _, p := range paths {
+		if c := impactForPath(p); c != "" {
+			seen[c] = true
+		}
+	}
+	for _, class := range impactOrder {
+		if seen[class] {
+			return class
+		}
+	}
+	if len(paths) > 0 {
+		return impactOff
+	}
+	return impactUnknown
+}
+
 type diffCommit struct {
 	SHA         string   `json:"sha"`
 	Title       string   `json:"title"`          // raw first line
@@ -70,17 +166,25 @@ type diffCommit struct {
 	Tags        []string `json:"tags,omitempty"` // leading bracket tags, e.g. Trucking, CMAS
 	Described   bool     `json:"described"`      // false for automated/housekeeping commits
 	Summary     string   `json:"summary,omitempty"`
+	Excerpt     string   `json:"excerpt,omitempty"`     // first sentences of the PR description (behavior changes)
+	PlainTitle  string   `json:"plain_title,omitempty"` // headline with jargon swapped for plain words
+	Kind        string   `json:"kind,omitempty"`        // fix | revert | speedup | tuning | refactor | new | removal | other
+	Note        string   `json:"note,omitempty"`        // English "what this means for the truck" (on-truck changes)
+	NeedsInfo   bool     `json:"needs_info"`            // affects the truck but has no usable description
 	PR          int      `json:"pr,omitempty"`
+	PRURL       string   `json:"pr_url,omitempty"` // https://github.com/<owner>/<repo>/pull/<PR>
 	Jira        string   `json:"jira,omitempty"`
-	URL         string   `json:"url"`
+	URL         string   `json:"url"` // commit page on GitHub
 	Author      string   `json:"author,omitempty"`
 	Date        string   `json:"date,omitempty"`
 	Areas       []string `json:"areas"`
+	Impact      string   `json:"impact"` // visible | driving | internal | off | "" (unknown)
 	IsFix       bool     `json:"is_fix"`
 	IsRevert    bool     `json:"is_revert"`
 	IsVehicleOS bool     `json:"is_vehicle_os"`
-	Dirs        []string `json:"dirs,omitempty"`  // most-touched top-level dirs, e.g. onroad/behavior
-	Files       []string `json:"files,omitempty"` // representative touched files (tracked areas first)
+	Origin      string   `json:"origin,omitempty"` // GitOrigin-RevId of an automatic sync (commit in the source repo)
+	Dirs        []string `json:"dirs,omitempty"`   // most-touched top-level dirs, e.g. onroad/behavior
+	Files       []string `json:"files,omitempty"`  // representative touched files (tracked areas first)
 	FilesKnown  bool     `json:"files_known"`
 }
 
@@ -89,27 +193,51 @@ const maxFilesPerCommit = 8
 var htmlCommentRe = regexp.MustCompile(`(?s)<!--.*?-->`)
 
 type diffCategory struct {
-	Key         string       `json:"key"`
-	Label       string       `json:"label"`
-	Items       []diffCommit `json:"items"`       // described commits only
-	Undescribed int          `json:"undescribed"` // automated/housekeeping commits that touched this area (count only)
+	Key                string         `json:"key"`
+	Label              string         `json:"label"`
+	Items              []diffCommit   `json:"items"`               // described on-truck commits only
+	Undescribed        int            `json:"undescribed"`         // automated/housekeeping on-truck commits (count only)
+	UndescribedDriving int            `json:"undescribed_driving"` // of those, how many touched driving/driver-facing code (flagged)
+	Flagged            []diffCommit   `json:"flagged"`             // those undescribed driving/driver-facing commits (no PR; commit + files)
+	Impact             map[string]int `json:"impact"`              // counts by impact class over on-truck commits in this area
+}
+
+var gitOriginRe = regexp.MustCompile(`GitOrigin-RevId:\s*([0-9a-f]{7,40})`)
+
+// simpleArea / simpleLang hold the plain-language ("explain it to a 10-year-old")
+// rendering of a diff in one language, written by the model when Vertex AI is
+// available (translator.simplifyDiff). Without it the browser and the
+// Confluence renderer fall back to fixed sentence templates plus the change
+// headlines.
+type simpleArea struct {
+	Sentence string   `json:"sentence"`
+	Bullets  []string `json:"bullets"`
+}
+
+type simpleLang struct {
+	Overall string                `json:"overall"`
+	Areas   map[string]simpleArea `json:"areas"` // keyed by category key: hmi, behavior, planner, prediction, fixes
 }
 
 type diffSummary struct {
-	Repo           string         `json:"repo"`
-	Base           string         `json:"base"`
-	Head           string         `json:"head"`
-	BaseDate       string         `json:"base_date,omitempty"` // YYYY-MM-DD(-NN) from the tag
-	HeadDate       string         `json:"head_date,omitempty"`
-	CompareURL     string         `json:"compare_url"`
-	TotalCommits   int            `json:"total_commits"`
-	Categories     []diffCategory `json:"categories"`      // HMI, Behavior, Planner, Prediction, Bug fixes
-	OtherCount     int            `json:"other_count"`     // commits outside every category (count only)
-	OtherAutomated int            `json:"other_automated"` // of which Vehicle OS syncs
-	Truncated      bool           `json:"truncated"`
-	AISummary      string         `json:"ai_summary,omitempty"`
-	Note           string         `json:"note,omitempty"`
-	GeneratedAt    string         `json:"generated_at"`
+	Repo           string                `json:"repo"`
+	Base           string                `json:"base"`
+	Head           string                `json:"head"`
+	BaseDate       string                `json:"base_date,omitempty"` // YYYY-MM-DD(-NN) from the tag
+	HeadDate       string                `json:"head_date,omitempty"`
+	CompareURL     string                `json:"compare_url"`
+	TotalCommits   int                   `json:"total_commits"`
+	Categories     []diffCategory        `json:"categories"`      // HMI, Behavior, Planner, Prediction, Bug fixes
+	OtherCount     int                   `json:"other_count"`     // on-truck commits outside every category (count only)
+	OtherAutomated int                   `json:"other_automated"` // of which Vehicle OS syncs
+	Impact         map[string]int        `json:"impact"`          // counts by impact class over all commits (incl. ignored "off")
+	Ignored        int                   `json:"ignored"`         // "off" commits (tools/sim/tests) — not shown anywhere else
+	OnTruck        int                   `json:"on_truck"`        // commits that run on the truck (visible+driving+internal+unknown)
+	Truncated      bool                  `json:"truncated"`
+	Simple         map[string]simpleLang `json:"simple,omitempty"` // "en", "ja" — model-written plain language
+	AISummary      string                `json:"ai_summary,omitempty"`
+	Note           string                `json:"note,omitempty"`
+	GeneratedAt    string                `json:"generated_at"`
 }
 
 type diffService struct {
@@ -221,11 +349,14 @@ func (s *diffService) get(ctx context.Context, base, head string) (*diffSummary,
 		return nil, err
 	}
 	if s.tr != nil && !s.tr.disabled {
-		if ai, err := s.tr.summarizeDiff(ctx, summary); err != nil {
-			log.Printf("diff: AI summary unavailable: %v", err)
-			summary.Note = "AI summary unavailable: " + truncate(err.Error(), 120)
+		if simple, err := s.tr.simplifyDiff(ctx, summary); err != nil {
+			log.Printf("diff: plain-language summary unavailable: %v", err)
+			summary.Note = "Plain-language summary unavailable: " + truncate(err.Error(), 120)
 		} else {
-			summary.AISummary = ai
+			summary.Simple = simple
+			if en, ok := simple["en"]; ok {
+				summary.AISummary = en.Overall
+			}
 		}
 	}
 
@@ -278,6 +409,9 @@ func buildDiffSummary(ctx context.Context, owner, repo, token, base, head string
 	items := make([]diffCommit, len(all))
 	for i, c := range all {
 		items[i] = parseCommit(c)
+		if items[i].PR > 0 {
+			items[i].PRURL = fmt.Sprintf("https://github.com/%s/%s/pull/%d", owner, repo, items[i].PR)
+		}
 	}
 
 	// Fetch touched files per commit (bounded) to classify by path.
@@ -314,6 +448,9 @@ func buildDiffSummary(ctx context.Context, owner, repo, token, base, head string
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	summary.Categories, summary.OtherCount, summary.OtherAutomated = categorize(items)
+	summary.Impact = impactCounts(items)
+	summary.Ignored = summary.Impact[impactOff]
+	summary.OnTruck = summary.TotalCommits - summary.Ignored
 	return summary, nil
 }
 
@@ -336,11 +473,19 @@ func parseCommit(c ghCommit) diffCommit {
 		item.Jira = m[1]
 	}
 	item.IsVehicleOS = title == vehicleOSTitle
+	if m := gitOriginRe.FindStringSubmatch(msg); m != nil {
+		item.Origin = m[1]
+	}
 	item.IsRevert = revertRe.MatchString(title)
 	item.IsFix = fixRe.MatchString(title) || item.IsRevert
 	item.Summary = firstSummaryLine(body)
+	item.Excerpt = extractExcerpt(body)
 	item.Headline, item.Tags = humanTitle(title)
 	item.Described = hasDescription(item)
+	if item.Described {
+		item.PlainTitle = plainTitle(item.Headline)
+		item.Kind = changeKind(item.Headline, item.Excerpt)
+	}
 	for _, a := range diffAreas {
 		if a.titleRe.MatchString(title) {
 			item.Areas = appendUnique(item.Areas, a.Key)
@@ -398,6 +543,71 @@ func hasDescription(item diffCommit) bool {
 	return true
 }
 
+var (
+	mdLinkRe       = regexp.MustCompile(`\[[^\]]*\]\([^)]*\)`) // [text](url) -> dropped (link words carry no meaning)
+	danglingLinkRe = regexp.MustCompile(`\[[^\]]*\]\s*\(?`)    // [text]( left over from a wrapped link
+	bareURLRe      = regexp.MustCompile(`https?://\S+`)
+	jiraInTextRe   = regexp.MustCompile(`\b[A-Z][A-Z0-9]+-\d+\b[;:,]?`)
+	leadingJunkRe  = regexp.MustCompile(`^[\s;:,.()\-–—]+`)
+	sentenceEnd    = regexp.MustCompile(`([.!?])\s+`)
+)
+
+// extractExcerpt returns the first few sentences of a PR description in
+// plain text (max ~420 chars): headers, images, links, checklists, template
+// labels and trailers are dropped.
+func extractExcerpt(body []string) string {
+	var kept []string
+	for _, raw := range body {
+		l := strings.TrimSpace(raw)
+		switch {
+		case l == "", strings.HasPrefix(l, "#"), strings.HasPrefix(l, "<"), strings.HasPrefix(l, "!["),
+			strings.HasPrefix(l, "GitOrigin-RevId"), strings.HasPrefix(l, "Co-authored-by"), strings.HasPrefix(l, "Signed-off-by"),
+			strings.HasPrefix(l, "---"), strings.HasPrefix(l, "|"), strings.HasPrefix(l, "- [ ]"), strings.HasPrefix(l, "- [x]"),
+			strings.Contains(l, "-->"), strings.Contains(l, "<!--"), strings.HasPrefix(l, "src="), strings.HasPrefix(l, "/>"):
+			continue
+		}
+		l = strings.NewReplacer("**", "", "`", "", "* ", "", "- ", "").Replace(l)
+		l = strings.TrimSpace(l)
+		if l == "" || (strings.HasSuffix(l, ":") && len(strings.Fields(l)) <= 3) {
+			continue
+		}
+		kept = append(kept, l)
+		if len(strings.Join(kept, " ")) > 800 {
+			break
+		}
+	}
+	// Clean on the joined text so links wrapped across lines are caught too.
+	text := strings.Join(kept, " ")
+	text = mdLinkRe.ReplaceAllString(text, "")
+	text = bareURLRe.ReplaceAllString(text, "")
+	text = danglingLinkRe.ReplaceAllString(text, "")
+	text = jiraInTextRe.ReplaceAllString(text, "")
+	text = multiSpaceRe.ReplaceAllString(text, " ")
+	text = strings.TrimSpace(leadingJunkRe.ReplaceAllString(strings.TrimSpace(text), ""))
+	if text == "" {
+		return ""
+	}
+	// Keep up to three sentences.
+	parts := sentenceEnd.Split(text, -1)
+	ends := sentenceEnd.FindAllStringSubmatch(text, -1)
+	var b strings.Builder
+	for i, p := range parts {
+		if i == 3 || strings.TrimSpace(p) == "" {
+			break
+		}
+		b.WriteString(strings.TrimSpace(p))
+		if i < len(ends) {
+			b.WriteString(ends[i][1])
+		}
+		b.WriteString(" ")
+	}
+	out := strings.TrimSpace(b.String())
+	if out == "" {
+		out = text
+	}
+	return truncateRunes(out, 420)
+}
+
 // firstSummaryLine picks the first informative body line of a PR description.
 func firstSummaryLine(body []string) string {
 	for _, raw := range body {
@@ -423,6 +633,8 @@ func firstSummaryLine(body []string) string {
 // most-touched top-level directories.
 func applyPaths(item *diffCommit, paths []string) {
 	item.FilesKnown = true
+	item.Impact = refineImpact(classifyImpact(paths), item.Title)
+	finalizeImpact(item)
 	dirCount := map[string]int{}
 	var tracked, untracked []string
 	for _, p := range paths {
@@ -473,6 +685,24 @@ func applyPaths(item *diffCommit, paths []string) {
 	sort.Slice(item.Areas, func(i, j int) bool { return areaIndex(item.Areas[i]) < areaIndex(item.Areas[j]) })
 }
 
+// affectsTruckBehavior reports whether a change is one a tester could notice.
+func affectsTruckBehavior(impact string) bool {
+	return impact == impactVisible || impact == impactDriving
+}
+
+// finalizeImpact derives the behavior note and the needs-info flag once the
+// impact class is known.
+func finalizeImpact(item *diffCommit) {
+	if !affectsTruckBehavior(item.Impact) {
+		item.Note, item.NeedsInfo = "", false
+		return
+	}
+	if item.Described {
+		item.Note = behaviorNote(item.Kind, item.Impact)
+	}
+	item.NeedsInfo = !item.Described || strings.TrimSpace(item.Excerpt) == ""
+}
+
 // areaForPath returns the area whose longest path prefix matches p, or "".
 func areaForPath(p string) string {
 	best, bestLen := "", 0
@@ -502,9 +732,9 @@ func areaIndex(key string) int {
 func categorize(items []diffCommit) (cats []diffCategory, otherCount, otherAutomated int) {
 	cats = make([]diffCategory, 0, len(diffAreas)+1)
 	for _, a := range diffAreas {
-		cats = append(cats, diffCategory{Key: a.Key, Label: a.Label, Items: []diffCommit{}})
+		cats = append(cats, diffCategory{Key: a.Key, Label: a.Label, Items: []diffCommit{}, Flagged: []diffCommit{}, Impact: map[string]int{}})
 	}
-	cats = append(cats, diffCategory{Key: "fixes", Label: "Bug fixes & reverts", Items: []diffCommit{}})
+	cats = append(cats, diffCategory{Key: "fixes", Label: "Bug fixes & reverts", Items: []diffCommit{}, Flagged: []diffCommit{}, Impact: map[string]int{}})
 	fixes := &cats[len(cats)-1]
 
 	add := func(c *diffCategory, it diffCommit) {
@@ -512,9 +742,17 @@ func categorize(items []diffCommit) (cats []diffCategory, otherCount, otherAutom
 			c.Items = append(c.Items, it)
 		} else {
 			c.Undescribed++
+			if affectsTruckBehavior(it.Impact) {
+				c.UndescribedDriving++
+				c.Flagged = append(c.Flagged, it)
+			}
 		}
+		c.Impact[impactKey(it.Impact)]++
 	}
 	for _, it := range items {
+		if it.Impact == impactOff {
+			continue // tools / simulation / tests: ignored (counted in diffSummary.Ignored)
+		}
 		for _, key := range it.Areas {
 			add(&cats[areaIndex(key)], it)
 		}
@@ -528,7 +766,40 @@ func categorize(items []diffCommit) (cats []diffCategory, otherCount, otherAutom
 			}
 		}
 	}
+	// Behavior-affecting changes first within each area, then the rest.
+	for i := range cats {
+		sort.SliceStable(cats[i].Items, func(a, b int) bool {
+			ra, rb := impactRank(cats[i].Items[a].Impact), impactRank(cats[i].Items[b].Impact)
+			return ra < rb
+		})
+	}
 	return cats, otherCount, otherAutomated
+}
+
+func impactRank(impact string) int {
+	for i, c := range impactOrder {
+		if c == impact {
+			return i
+		}
+	}
+	return len(impactOrder)
+}
+
+// impactKey maps the empty (unknown) impact to a JSON-friendly key.
+func impactKey(impact string) string {
+	if impact == "" {
+		return "unknown"
+	}
+	return impact
+}
+
+// impactCounts tallies commits by impact class.
+func impactCounts(items []diffCommit) map[string]int {
+	m := map[string]int{}
+	for _, it := range items {
+		m[impactKey(it.Impact)]++
+	}
+	return m
 }
 
 func appendUnique(list []string, v string) []string {
@@ -555,8 +826,17 @@ func dryRunDiff(base, head string) *diffSummary {
 		gc := ghCommit{SHA: "0123456789abcdef", HTMLURL: "https://github.com/Ext-Applied-Frontier/brain2/commit/0123456"}
 		gc.Commit.Message = title + "\n\n" + summary
 		c := parseCommit(gc)
+		if c.PR > 0 {
+			c.PRURL = fmt.Sprintf("https://github.com/Ext-Applied-Frontier/brain2/pull/%d", c.PR)
+		}
 		c.Areas, c.IsFix, c.IsVehicleOS, c.Dirs, c.FilesKnown = areas, fix || c.IsFix, vos, dirs, true
 		c.Described = hasDescription(c)
+		var paths []string
+		for _, d := range dirs {
+			paths = append(paths, d+"/sample.cc")
+		}
+		c.Impact = refineImpact(classifyImpact(paths), c.Title)
+		finalizeImpact(&c)
 		return c
 	}
 	items := []diffCommit{
@@ -564,6 +844,7 @@ func dryRunDiff(base, head string) *diffSummary {
 		mk("FRONTIER-34980: Fix planner stall when route has back-to-back merges (#120950)", "Regression from #120410; adds sim coverage.", []string{"planner"}, true, false, "onroad/behavior/planning"),
 		mk("FRONTIER-34877: Retune cut-in prediction horizon for trucks (#120880)", "", []string{"prediction"}, false, false, "onroad/behavior/prediction"),
 		mk("FRONTIER-34901: [Behavior] Yield earlier to emergency vehicles (#120902)", "", []string{"behavior"}, false, false, "onroad/behavior"),
+		mk("FRONTIER-34990: [Sim] Add planner regression scenario for merges (#120960)", "Simulation only.", []string{"planner"}, false, false, "trucking/simulation"),
 		mk("Vehicle OS Change", "", []string{}, false, true, "vehicle_os/third_party"),
 		mk("FRONTIER-34960: Update usa_zone_10 HD map data (#120937)", "Basemap and routes update.", []string{}, false, false, "trucking/mapping"),
 	}
@@ -572,10 +853,22 @@ func dryRunDiff(base, head string) *diffSummary {
 		BaseDate: tagDateKey(base), HeadDate: tagDateKey(head),
 		CompareURL:   "https://github.com/Ext-Applied-Frontier/brain2/compare/" + base + "..." + head,
 		TotalCommits: len(items),
-		AISummary:    "- Dry run: sample build. The driver display gains a countdown of remaining self-driving distance.\n- A planner problem on back-to-back merges was fixed.\n- Prediction of cut-ins was retuned for trucks.",
+		AISummary:    "Dry run: a small build. The driver's screen shows how far the truck can keep driving itself, a planner problem was fixed, and the truck got better at guessing cut-ins.",
 		GeneratedAt:  time.Now().UTC().Format(time.RFC3339),
 	}
 	d.Categories, d.OtherCount, d.OtherAutomated = categorize(items)
+	d.Impact = impactCounts(items)
+	d.Ignored = d.Impact[impactOff]
+	d.OnTruck = d.TotalCommits - d.Ignored
+	d.Simple = map[string]simpleLang{
+		"en": {Overall: d.AISummary, Areas: map[string]simpleArea{
+			"hmi":        {Sentence: "1 change to what the driver sees on the screen.", Bullets: []string{"The screen now shows how far the truck can keep driving itself."}},
+			"behavior":   {Sentence: "1 change to how the truck decides what to do.", Bullets: []string{"The truck moves out of the way of ambulances and fire trucks sooner."}},
+			"planner":    {Sentence: "1 change to how the truck plans where to drive.", Bullets: []string{"You might notice: fixed the truck getting stuck when two merges come right after each other."}},
+			"prediction": {Sentence: "1 change to how the truck guesses what other cars will do.", Bullets: []string{"Better at guessing when a car will cut in front of the truck."}},
+			"fixes":      {Sentence: "1 problem was fixed.", Bullets: []string{"Fixed the truck getting stuck when two merges come right after each other."}},
+		}},
+	}
 	return d
 }
 

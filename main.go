@@ -5,7 +5,9 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"html/template"
+	"io/fs"
 	"log"
 	"net/http"
 	"strings"
@@ -27,6 +29,43 @@ var i18nFS embed.FS
 var pageTemplate = template.Must(template.ParseFS(templatesFS, "templates/index.html.tmpl"))
 var confirmTemplate = template.Must(template.ParseFS(templatesFS, "templates/confirm.html.tmpl"))
 var feedbackTemplate = template.Must(template.ParseFS(templatesFS, "templates/feedback.html.tmpl"))
+
+// assetVersion fingerprints the embedded static/i18n files. Templates append it
+// as ?v=… to asset URLs and the static handler uses it as the ETag, so a new
+// deploy can never be served with a browser-cached app.js from the previous one
+// (embed.FS has no modification times, so browsers otherwise guess).
+var assetVersion = computeAssetVersion()
+
+func computeAssetVersion() string {
+	h := fnv.New64a()
+	for _, fsys := range []fs.FS{staticFS, i18nFS} {
+		fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			b, _ := fs.ReadFile(fsys, p)
+			h.Write([]byte(p))
+			h.Write(b)
+			return nil
+		})
+	}
+	return fmt.Sprintf("%x", h.Sum64())
+}
+
+// noCache serves embedded assets with revalidation on every load: browsers
+// keep the bytes but must check the ETag, which changes with every deploy.
+func noCache(h http.Handler) http.Handler {
+	etag := `"` + assetVersion + `"`
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("ETag", etag)
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
 
 const gatekeeperURL = "https://gatekeeper.experimental.apps.applied.dev/master-verification/trucking/new"
 
@@ -66,6 +105,7 @@ type formData struct {
 	GithubURL           string
 	CurrentEngineer     string   // signed-in user's name (from IAP), pre-fills Test Engineer
 	Vehicles            []string // Vehicle field autofill options, e.g. 801..835
+	AssetVersion        string   // cache-busting token for /static and /i18n URLs
 }
 
 const githubURL = "https://github.com/john-pham-ai/Master-checklist"
@@ -80,6 +120,7 @@ func makeIndexHandler(vehicles []string) http.HandlerFunc {
 			GithubURL:           githubURL,
 			CurrentEngineer:     currentEngineerName(r),
 			Vehicles:            vehicles,
+			AssetVersion:        assetVersion,
 		}
 		setTridentCookie(w)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -193,7 +234,8 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			PageURL        string
 			GatekeeperURL  string
 			ShowGatekeeper bool
-		}{PageURL: pageURL, GatekeeperURL: gatekeeperURL, ShowGatekeeper: !isCandidate}); err != nil {
+			AssetVersion   string
+		}{PageURL: pageURL, GatekeeperURL: gatekeeperURL, ShowGatekeeper: !isCandidate, AssetVersion: assetVersion}); err != nil {
 			log.Printf("confirm template execute error: %v", err)
 		}
 	}
@@ -270,16 +312,35 @@ func toConfluenceDiff(d *diffSummary, notes string) *confluence.DiffSummary {
 	out := &confluence.DiffSummary{
 		Repo: d.Repo, Base: d.Base, Head: d.Head, BaseDate: d.BaseDate, HeadDate: d.HeadDate,
 		CompareURL: d.CompareURL, TotalCommits: d.TotalCommits,
-		OtherCount: d.OtherCount, OtherAutomated: d.OtherAutomated,
+		OtherCount: d.OtherCount, OtherAutomated: d.OtherAutomated, Impact: d.Impact,
+		Ignored: d.Ignored, OnTruck: d.OnTruck,
 		AISummary: d.AISummary, Notes: strings.TrimSpace(notes),
 	}
+	if len(d.Simple) > 0 {
+		out.Simple = map[string]confluence.SimpleLang{}
+		for lang, s := range d.Simple {
+			cs := confluence.SimpleLang{Overall: s.Overall, Areas: map[string]confluence.SimpleArea{}}
+			for k, a := range s.Areas {
+				cs.Areas[k] = confluence.SimpleArea{Sentence: a.Sentence, Bullets: a.Bullets}
+			}
+			out.Simple[lang] = cs
+		}
+	}
 	for _, c := range d.Categories {
-		cat := confluence.DiffCategory{Key: c.Key, Label: c.Label, Undescribed: c.Undescribed}
+		cat := confluence.DiffCategory{Key: c.Key, Label: c.Label, Undescribed: c.Undescribed, UndescribedDriving: c.UndescribedDriving, Impact: c.Impact}
+		conv := func(it diffCommit) confluence.DiffItem {
+			return confluence.DiffItem{
+				Title: it.Title, Headline: it.Headline, PlainTitle: it.PlainTitle, URL: it.URL, Summary: it.Summary,
+				Excerpt: it.Excerpt, Note: it.Note, Kind: it.Kind, Jira: it.Jira, PR: it.PR, PRURL: it.PRURL, Tags: it.Tags,
+				Impact: it.Impact, NeedsInfo: it.NeedsInfo, IsFix: it.IsFix, IsRevert: it.IsRevert,
+				SHA: it.SHA, Origin: it.Origin, Dirs: it.Dirs, Files: it.Files,
+			}
+		}
 		for _, it := range c.Items {
-			cat.Items = append(cat.Items, confluence.DiffItem{
-				Title: it.Title, Headline: it.Headline, URL: it.URL, Summary: it.Summary,
-				Jira: it.Jira, PR: it.PR, Tags: it.Tags, IsFix: it.IsFix, IsRevert: it.IsRevert,
-			})
+			cat.Items = append(cat.Items, conv(it))
+		}
+		for _, it := range c.Flagged {
+			cat.Flagged = append(cat.Flagged, conv(it))
 		}
 		out.Categories = append(out.Categories, cat)
 	}
@@ -330,8 +391,8 @@ func main() {
 	mux.HandleFunc("/feedback", feedback.handleForm)
 	mux.HandleFunc("/api/feedback", feedback.handleSubmit)
 	mux.HandleFunc("/api/feedback/connect", feedback.handleConnect)
-	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
-	mux.Handle("/i18n/", http.FileServer(http.FS(i18nFS)))
+	mux.Handle("/static/", noCache(http.FileServer(http.FS(staticFS))))
+	mux.Handle("/i18n/", noCache(http.FileServer(http.FS(i18nFS))))
 
 	log.Printf("listening on %s (dry_run=%v)", cfg.Addr, cfg.DryRun)
 	log.Fatal(http.ListenAndServe(cfg.Addr, mux))

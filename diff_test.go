@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -50,8 +51,8 @@ func TestParseCommit(t *testing.T) {
 	}
 
 	vos := ghCommit{SHA: "def"}
-	vos.Commit.Message = "Vehicle OS Change\n\nGitOrigin-RevId: a9bbd36c"
-	if p := parseCommit(vos); !p.IsVehicleOS || p.Summary != "" || p.IsFix {
+	vos.Commit.Message = "Vehicle OS Change\n\nGitOrigin-RevId: a9bbd36c0e0fe7ddf882bb282575d1d3bd065bdc"
+	if p := parseCommit(vos); !p.IsVehicleOS || p.Summary != "" || p.IsFix || p.Origin != "a9bbd36c0e0fe7ddf882bb282575d1d3bd065bdc" {
 		t.Errorf("vehicle os parse: %+v", p)
 	}
 
@@ -165,6 +166,185 @@ func TestHasDescription(t *testing.T) {
 	}
 	if !hasDescription(mk("FRONTIER-34875: Mark run duration using dashed lines in HIL expt trace report (#119894)", false)) {
 		t.Error("normal PR must count as described")
+	}
+}
+
+func TestClassifyImpact(t *testing.T) {
+	cases := []struct {
+		paths []string
+		want  string
+	}{
+		{[]string{"onroad/hmi/driver/screen.cc", "trucking/offboard/report.py"}, impactVisible}, // any visible file wins
+		{[]string{"onroad/behavior/planning/lane_change.cc"}, impactDriving},
+		{[]string{"trucking/mapping/usa_zone_10.textpb", "common/adp_map_tiles/tiles.json"}, impactDriving},
+		{[]string{"onroad/perception/lidar/cluster.cc", "common/localization/ekf.cc"}, impactInternal},
+		{[]string{"vehicle_os/middleware/bus.cc"}, impactInternal},
+		{[]string{"trucking/simulation/scenarios/merge.yaml", "trucking/dashboards/sys.json"}, impactOff},
+		{[]string{"onroad/behavior/planning/lane_change_test.cc"}, impactOff}, // tests only
+		{[]string{"trucking/planning/BUILD", "README.md"}, impactOff},         // build glue + docs only
+		{[]string{"onroad/behavior/planning/lane_change.cc", "trucking/tools/x.py"}, impactDriving},
+		{nil, impactUnknown},
+	}
+	for _, c := range cases {
+		if got := classifyImpact(c.paths); got != c.want {
+			t.Errorf("classifyImpact(%v) = %q, want %q", c.paths, got, c.want)
+		}
+	}
+}
+
+func TestPlainTitle(t *testing.T) {
+	cases := map[string]string{
+		"Reuse waypoints in LaneBoundaryExcursionCost::ComputeCost":     "Reuse points along the planned path in lane-edge penalty score",
+		"Bump composite-vehicle handwheel normalization to 925 deg":     "Bump composite-vehicle steering wheel scaling to 925 deg",
+		"Retune cut-in prediction horizon for trucks":                   "Retune car pulling in front guessing what others will do horizon for trucks",
+		"Anchor HD map to map-matched localization instead of raw GNSS": "Anchor detailed road map to map-matched knowing where the truck is instead of raw satellite positioning (GPS)",
+		"Show remaining ODD distance on driver display":                 "Show remaining self-driving zone (ODD) distance on driver display",
+	}
+	for in, want := range cases {
+		if got := plainTitle(in); got != want {
+			t.Errorf("plainTitle(%q)\n got  %q\n want %q", in, got, want)
+		}
+	}
+}
+
+func TestChangeKind(t *testing.T) {
+	cases := map[string]string{
+		"Reuse waypoints in LaneBoundaryExcursionCost::ComputeCost": kindSpeedup,
+		"Reverted: Re-enable CL Planner-only LogSim":                kindRevert,
+		"Fix planner stall when route has back-to-back merges":      kindFix,
+		"Bump composite-vehicle handwheel normalization to 925 deg": kindTuning,
+		"Yield earlier to emergency vehicles":                       kindOther,
+		"Add RelocationHandler trigger handler":                     kindNew,
+		"Refactor lane change state machine":                        kindRefactor,
+	}
+	for in, want := range cases {
+		if got := changeKind(in, ""); got != want {
+			t.Errorf("changeKind(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestExtractExcerpt(t *testing.T) {
+	body := strings.Split("## Problems\n\n1. The HD map overlay in the RA viz used raw GNSS (Applanix) to position\nitself relative to the ego vehicle. Raw GNSS can be several metres off —\nespecially in areas with poor satellite geometry — so operators would\nsee the truck sitting in the wrong lane. Even when the camera feed showed it correctly.\n- <img width=\"257\" alt=\"image\" src=\"x\"/>\n2. There was also a rotational mismatch.\n\nGitOrigin-RevId: abc", "\n")
+	got := extractExcerpt(body)
+	if !strings.HasPrefix(got, "1. The HD map overlay in the RA viz used raw GNSS") {
+		t.Errorf("excerpt start = %q", got)
+	}
+	if strings.Contains(got, "GitOrigin") || strings.Contains(got, "<img") {
+		t.Errorf("excerpt leaked trailers/markup: %q", got)
+	}
+	if strings.Count(got, ". ")+1 > 4 {
+		t.Errorf("excerpt should be at most three sentences: %q", got)
+	}
+	if extractExcerpt([]string{"", "GitOrigin-RevId: x"}) != "" {
+		t.Error("trailer-only body must give an empty excerpt")
+	}
+
+	// Link debris and ticket keys at the start must not survive (real PR #113119 shape).
+	wrapped := strings.Split("FRONTIER-33611; [Parent](https://github.com/x/y/pull/113100\n)\nGetLaneBoundaryDiscomfort takes waypoints instead of trajectory and no longer\nre-samples waypoints every time the function is called.\n", "\n")
+	if got := extractExcerpt(wrapped); !strings.HasPrefix(got, "GetLaneBoundaryDiscomfort takes waypoints") {
+		t.Errorf("excerpt with wrapped link = %q", got)
+	}
+}
+
+func TestCategorizeIgnoresOffAndFlags(t *testing.T) {
+	items := []diffCommit{
+		{Title: "a", Headline: "a", Described: true, Areas: []string{"planner"}, Impact: impactDriving, Excerpt: "It does X.", Kind: kindTuning},
+		{Title: "b", Headline: "b", Described: true, Areas: []string{"planner"}, Impact: impactOff},
+		{Title: vehicleOSTitle, IsVehicleOS: true, Areas: []string{"planner"}, Impact: impactDriving},
+		{Title: vehicleOSTitle, IsVehicleOS: true, Areas: []string{"planner"}, Impact: impactInternal},
+		{Title: "e", Headline: "e", Described: true, Areas: []string{}, Impact: impactOff},
+		{Title: "f", Headline: "f", Described: true, Areas: []string{}, Impact: impactInternal},
+	}
+	for i := range items {
+		finalizeImpact(&items[i])
+	}
+	cats, otherCount, _ := categorize(items)
+	var planner diffCategory
+	for _, c := range cats {
+		if c.Key == "planner" {
+			planner = c
+		}
+	}
+	if len(planner.Items) != 1 || planner.Items[0].Title != "a" {
+		t.Errorf("off-truck change must be ignored; items = %+v", planner.Items)
+	}
+	if planner.Undescribed != 2 || planner.UndescribedDriving != 1 {
+		t.Errorf("undescribed = %d (driving %d), want 2 (1)", planner.Undescribed, planner.UndescribedDriving)
+	}
+	if len(planner.Flagged) != 1 || planner.Flagged[0].Impact != impactDriving {
+		t.Errorf("flagged should hold the undescribed driving sync: %+v", planner.Flagged)
+	}
+	if _, ok := planner.Impact[impactOff]; ok {
+		t.Error("off must not be counted in category impact")
+	}
+	if otherCount != 1 {
+		t.Errorf("otherCount = %d, want 1 (off-truck 'e' ignored)", otherCount)
+	}
+	if items[0].NeedsInfo || items[0].Note == "" {
+		t.Errorf("described driving change with excerpt: needs_info=%v note=%q", items[0].NeedsInfo, items[0].Note)
+	}
+	if !items[2].NeedsInfo {
+		t.Error("undescribed driving change must be flagged")
+	}
+	if items[3].NeedsInfo || items[3].Note != "" {
+		t.Error("internal change must not be flagged or annotated")
+	}
+}
+
+func TestRefineImpact(t *testing.T) {
+	if got := refineImpact(impactInternal, `Revert "FRONTIER-34267: [Sim] Re-enable CL Planner-only LogSim"`); got != impactOff {
+		t.Errorf("sim-titled internal change should be off, got %q", got)
+	}
+	if got := refineImpact(impactDriving, "[Sim] tune planner for LogSim"); got != impactDriving {
+		t.Errorf("driving verdict must be kept, got %q", got)
+	}
+	if got := refineImpact(impactInternal, "Improve lidar clustering"); got != impactInternal {
+		t.Errorf("non-sim internal must stay internal, got %q", got)
+	}
+}
+
+func TestCategorizeImpactCounts(t *testing.T) {
+	items := []diffCommit{
+		{Title: "a", Headline: "a", Described: true, Areas: []string{"planner"}, Impact: impactDriving},
+		{Title: "b", Headline: "b", Described: true, Areas: []string{"planner"}, Impact: impactOff},
+		{Title: vehicleOSTitle, IsVehicleOS: true, Areas: []string{"planner"}, Impact: impactInternal},
+		{Title: "d", Headline: "d", Described: true, Areas: []string{}, Impact: impactOff},
+	}
+	cats, _, _ := categorize(items)
+	var planner diffCategory
+	for _, c := range cats {
+		if c.Key == "planner" {
+			planner = c
+		}
+	}
+	// Off-truck changes are ignored inside areas; only on-truck classes are tallied.
+	if planner.Impact[impactDriving] != 1 || planner.Impact[impactInternal] != 1 || planner.Impact[impactOff] != 0 {
+		t.Errorf("planner impact counts = %v", planner.Impact)
+	}
+	all := impactCounts(items)
+	if all[impactOff] != 2 || all[impactDriving] != 1 || all[impactInternal] != 1 {
+		t.Errorf("overall impact counts = %v", all)
+	}
+}
+
+func TestParseSimpleJSON(t *testing.T) {
+	raw := "```json\n{\"en\":{\"overall\":\"A quiet night.\",\"areas\":{\"hmi\":{\"sentence\":\"Nothing changed on the screen.\",\"bullets\":[]},\"fixes\":{\"sentence\":\"One problem was fixed.\",\"bullets\":[\"The dashboard loads again.\"]}}},\"ja\":{\"overall\":\"静かな夜でした。\",\"areas\":{}}}\n```"
+	got, err := parseSimpleJSON(raw)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got["en"].Overall != "A quiet night." || got["en"].Areas["fixes"].Bullets[0] != "The dashboard loads again." {
+		t.Errorf("unexpected parse result: %+v", got["en"])
+	}
+	if got["ja"].Overall != "静かな夜でした。" {
+		t.Errorf("japanese missing: %+v", got["ja"])
+	}
+	if _, err := parseSimpleJSON(`{"ja":{"overall":"x","areas":{}}}`); err == nil {
+		t.Error("missing English rendering should be an error")
+	}
+	if _, err := parseSimpleJSON(`not json`); err == nil {
+		t.Error("invalid JSON should be an error")
 	}
 }
 
