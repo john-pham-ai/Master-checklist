@@ -14,7 +14,7 @@ import (
 	"github.com/john-pham-ai/Master-checklist/confluence"
 )
 
-//go:embed templates/index.html.tmpl templates/confirm.html.tmpl
+//go:embed templates/index.html.tmpl templates/confirm.html.tmpl templates/feedback.html.tmpl
 var templatesFS embed.FS
 
 //go:embed static
@@ -25,6 +25,7 @@ var i18nFS embed.FS
 
 var pageTemplate = template.Must(template.ParseFS(templatesFS, "templates/index.html.tmpl"))
 var confirmTemplate = template.Must(template.ParseFS(templatesFS, "templates/confirm.html.tmpl"))
+var feedbackTemplate = template.Must(template.ParseFS(templatesFS, "templates/feedback.html.tmpl"))
 
 const gatekeeperURL = "https://gatekeeper.experimental.apps.applied.dev/master-verification/trucking/new"
 
@@ -79,6 +80,7 @@ func makeIndexHandler(vehicles []string) http.HandlerFunc {
 			CurrentEngineer:     currentEngineerName(r),
 			Vehicles:            vehicles,
 		}
+		setTridentCookie(w)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := pageTemplate.Execute(w, data); err != nil {
 			log.Printf("template execute error: %v", err)
@@ -289,6 +291,11 @@ func main() {
 	mux.HandleFunc("/submit", makeSubmitHandler(cfg))
 	mux.HandleFunc("/api/tags", makeTagsHandler(cfg))
 	mux.HandleFunc("/api/engineers", makeEngineersHandler(newEngineerSource(cfg.EngineerGroups, cfg.DryRun)))
+
+	feedback := &feedbackService{cfg: cfg, data: newDataAPI(), tr: newTranslator(cfg.ProjectID, cfg.DryRun)}
+	mux.HandleFunc("/feedback", feedback.handleForm)
+	mux.HandleFunc("/api/feedback", feedback.handleSubmit)
+	mux.HandleFunc("/api/feedback/connect", feedback.handleConnect)
 	mux.Handle("/static/", http.FileServer(http.FS(staticFS)))
 	mux.Handle("/i18n/", http.FileServer(http.FS(i18nFS)))
 

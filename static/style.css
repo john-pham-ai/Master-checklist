@@ -105,6 +105,40 @@ form { max-width: 860px; margin: 0 auto; padding: 1.5rem; }
   font-weight: 600;
 }
 
+.btn-link {
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  text-decoration: none;
+}
+.btn-link:hover { border-color: var(--accent); }
+
+textarea {
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.6rem;
+  width: 100%;
+  resize: vertical;
+}
+
+.stack { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.85rem; color: var(--muted); margin: 0.9rem 0; }
+.muted { color: var(--muted); }
+.small { font-size: 0.8rem; }
+
+.status { margin-top: 1rem; padding: 0.6rem 0.8rem; border-radius: 6px; border: 1px solid var(--border); }
+.status.error { border-color: var(--fail); color: var(--fail); }
+.status.ok { border-color: var(--pass); }
+
+.notice { margin-top: 1rem; padding: 0.8rem 1rem; border: 1px dashed var(--accent); border-radius: 8px; }
+.notice p { margin-top: 0; }
+
 footer {
   text-align: center;
   padding: 1.5rem;

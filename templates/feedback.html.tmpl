@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Help / Feedback — AD Smoke Test Checklist</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <h1 data-i18n="feedback_title">Help, Bugs &amp; Feedback</h1>
+  <div class="controls">
+    <a class="btn-link" href="/" data-i18n="feedback_back">Back to checklist</a>
+    <button id="theme-toggle" type="button">Light mode</button>
+  </div>
+</header>
+
+<form id="feedback-form" data-feedback-to="{{.FeedbackTo}}">
+  <section class="card">
+    <p class="muted" data-i18n="feedback_intro">Ask a question, report a bug, or suggest an improvement. Your message is emailed to the checklist owner from your own Google account. Japanese messages are automatically translated to English for the recipient.</p>
+    <p class="muted small"><span data-i18n="feedback_recipient">Recipient</span>: {{.FeedbackTo}} &nbsp;·&nbsp; <span data-i18n="feedback_from">Sent from</span>: {{if .CurrentEmail}}{{.CurrentEmail}}{{else}}—{{end}}</p>
+
+    <div class="grid">
+      <label>
+        <span data-i18n="feedback_language">Language</span>
+        <select id="lang-select">
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
+        </select>
+      </label>
+      <label>
+        <span data-i18n="feedback_type">Type</span>
+        <select id="feedback-type" name="type">
+          <option value="help" data-i18n="feedback_type_help">Help / question</option>
+          <option value="bug" data-i18n="feedback_type_bug">Bug report</option>
+          <option value="feedback" data-i18n="feedback_type_feedback">Feedback / idea</option>
+        </select>
+      </label>
+    </div>
+
+    <label class="stack">
+      <span data-i18n="feedback_subject">Subject</span>
+      <input type="text" id="feedback-subject" name="subject" maxlength="200" autocomplete="off">
+    </label>
+    <label class="stack">
+      <span data-i18n="feedback_message">Message</span>
+      <textarea id="feedback-message" name="message" rows="8" required maxlength="20000" data-i18n-placeholder="feedback_message_placeholder" placeholder="What happened? What did you expect? Steps to reproduce, run IDs, links…"></textarea>
+    </label>
+
+    <button type="submit" class="submit-btn" id="feedback-submit" data-i18n="feedback_submit">Send</button>
+
+    <div id="feedback-connect" class="notice" hidden>
+      <p data-i18n="feedback_connect_explain">To send the email from your own account, allow this app to send mail on your behalf (send-only permission, one time).</p>
+      <button type="button" id="feedback-connect-btn" data-i18n="feedback_connect_gmail">Connect Gmail</button>
+    </div>
+    <p id="feedback-status" class="status" hidden></p>
+  </section>
+</form>
+
+<footer>
+  <a href="/" data-i18n="feedback_back">Back to checklist</a>
+</footer>
+
+<script src="/static/app.js"></script>
+<script src="/static/feedback.js"></script>
+</body>
+</html>

@@ -46,6 +46,32 @@ Membership is resolved in two layers (`engineers.go`):
    and `okta-ext-vehicle_operators-jp` are empty until a group owner runs the script or
    their emails are added to the JSON by hand.
 
+## Help / Bugs / Feedback
+
+The **Help / Feedback** button in the header opens `/feedback`: a form (EN/JA, with its own
+language selector) whose submission is emailed to `FEEDBACK_TO` (default
+`john.pham@applied.co`).
+
+- **Email transport** — the apps-platform [Data API](https://apps.applied.dev/docs/data-api)
+  Gmail integration, sending *as the signed-in user* (`gmail.send` scope only). The first
+  time someone submits, the app answers `needs_connect` and the page shows a **Connect
+  Gmail** button that opens the platform's OAuth popup; the message is re-sent once the
+  popup closes. Connections are per environment (staging and prod are separate).
+  The Data API needs the platform-injected `X-Request-Token`, which is only added when the
+  browser carries the `trident=true` cookie — the app sets it on every page load.
+- **Translation** — Japanese text (hiragana/katakana/kanji) is translated to English with
+  Gemini on Vertex AI (`TRANSLATE_MODEL`, default `gemini-2.5-flash`, in `VERTEX_LOCATION`)
+  before sending; the email contains the English translation followed by the original.
+  This requires `roles/aiplatform.user` for `master-checklist-sa` in each project — until
+  it is granted, translation fails with 403 and the email carries the original text plus a
+  note (`Automatic translation was unavailable: …`).
+- **Email layout** — subject `[Master Checklist] <Bug report|Help request|Feedback>: <English
+  headline>`; body with submitter, time, environment/revision, UI language, page, the
+  translation (if any), the original message and the user agent.
+- **Local testing** — run `apps-platform app forwarder --service master-checklist`, export
+  the `SOCKS_PORT`, `DATA_API_URL`, `DATA_API_AUTH_TOKEN`, `X_REQUEST_TOKEN` lines it prints,
+  and start the app; `/api/feedback` then talks to the real Data API as you.
+
 ## Local development
 
 ```sh
@@ -84,6 +110,11 @@ CONFLUENCE_TOKEN="<atlassian-api-token>" GITHUB_TOKEN="<github-pat>" go run .
 | `CONFLUENCE_DRY_RUN` | `false` | Skip Secret Manager + Confluence/GitHub calls, log instead |
 | `ENGINEER_GROUPS` | vehicle-testing, ext-frontier, ext-vehicle_operators-jp | Groups whose members populate the Test Engineer dropdown |
 | `VEHICLE_RANGE` | `801-835` | Vehicle IDs offered in the Vehicle dropdown; ranges and/or single IDs, comma-separated (e.g. `801-840,900`) |
+| `FEEDBACK_TO` | `john.pham@applied.co` | Recipient of Help/Bug/Feedback emails |
+| `TRANSLATE_MODEL` | `gemini-2.5-flash` | Vertex AI model used to translate Japanese feedback to English |
+| `VERTEX_LOCATION` | `us-central1` | Vertex AI region |
+| `TRANSLATE_DISABLED` | `false` | Skip translation entirely |
+| `PROJECT_ID`, `URL_BASE` | injected by apps-platform | Used for Vertex AI and the Data API base URL (`https://dataapi.$URL_BASE`) |
 | `CONFLUENCE_TOKEN` | — | Local dev only: use this Atlassian API token instead of Secret Manager |
 | `GITHUB_TOKEN` | — | Local dev only: use this GitHub PAT instead of Secret Manager |
 

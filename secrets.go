@@ -100,6 +100,13 @@ type config struct {
 	// VehicleRange is the inclusive vehicle ID range(s) suggested in the
 	// Vehicle field, e.g. "801-835".
 	VehicleRange string
+
+	// FeedbackTo receives help/bug/feedback emails. ProjectID and URLBase are
+	// injected by apps-platform and used for Vertex AI translation and the
+	// Data API respectively.
+	FeedbackTo string
+	ProjectID  string
+	URLBase    string
 }
 
 func loadConfig() config {
@@ -120,6 +127,10 @@ func loadConfig() config {
 
 		EngineerGroups: envOrDefault("ENGINEER_GROUPS", defaultEngineerGroups),
 		VehicleRange:   envOrDefault("VEHICLE_RANGE", defaultVehicleRange),
+
+		FeedbackTo: envOrDefault("FEEDBACK_TO", defaultFeedbackTo),
+		ProjectID:  os.Getenv("PROJECT_ID"),
+		URLBase:    os.Getenv("URL_BASE"),
 	}
 }
 

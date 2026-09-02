@@ -48,6 +48,13 @@
       .catch((err) => console.error("failed to load translations", lang, err));
   }
 
+  // Small public helper so page-specific scripts (feedback.js) can reuse the
+  // loaded translations for dynamic status messages.
+  window.checklistI18n = {
+    t: (key, fallback) => (translations[currentLang()] && translations[currentLang()][key]) || fallback,
+    lang: currentLang,
+  };
+
   let savedTheme = "dark";
   let savedLang = "en";
   try {
