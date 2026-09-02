@@ -77,6 +77,45 @@ const translatePrompt = "You are a professional Japanese-to-English translator f
 
 // toEnglish translates text (typically Japanese) into English.
 func (t *translator) toEnglish(ctx context.Context, text string) (string, error) {
+	return t.generate(ctx, translatePrompt+text)
+}
+
+const diffSummaryPrompt = "You explain software changes to vehicle test operators who are not software engineers. " +
+	"Below are the changes between last night's build and tonight's build of the self-driving truck software, grouped by area. " +
+	"Write at most 6 short plain-English bullet points (start each with '- '), one per area that changed, in this order: HMI (what the driver sees and hears), Behavior (driving decisions), Planner (path and speed), Prediction (other road users), bug fixes. " +
+	"Say what a driver or tester might notice. Avoid jargon, code names, file paths, ticket numbers and PR numbers. Do not invent details; if a change is unclear, say 'minor internal change'. No headings, no preamble.\n\n"
+
+// summarizeDiff produces a short narrative of a categorized nightly diff.
+func (t *translator) summarizeDiff(ctx context.Context, d *diffSummary) (string, error) {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Compare: %s -> %s (%d changes, %d of them outside the areas below)\n\n", d.Base, d.Head, d.TotalCommits, d.OtherCount)
+	for _, c := range d.Categories {
+		if len(c.Items) == 0 && c.Undescribed == 0 {
+			continue
+		}
+		fmt.Fprintf(&b, "## %s\n", c.Label)
+		for i, it := range c.Items {
+			if i == 40 {
+				fmt.Fprintf(&b, "- (+%d more)\n", len(c.Items)-40)
+				break
+			}
+			fmt.Fprintf(&b, "- %s", it.Headline)
+			if it.Summary != "" {
+				fmt.Fprintf(&b, " — %s", it.Summary)
+			}
+			b.WriteString("\n")
+		}
+		if c.Undescribed > 0 {
+			fmt.Fprintf(&b, "- (%d automated or undescribed changes also touched this area)\n", c.Undescribed)
+		}
+		b.WriteString("\n")
+	}
+	return t.generate(ctx, diffSummaryPrompt+b.String())
+}
+
+// generate sends a single-turn prompt to Gemini on Vertex AI and returns the
+// text of the first candidate.
+func (t *translator) generate(ctx context.Context, prompt string) (string, error) {
 	if t.disabled {
 		return "", fmt.Errorf("translation disabled")
 	}
@@ -90,7 +129,7 @@ func (t *translator) toEnglish(ctx context.Context, text string) (string, error)
 	reqBody := map[string]interface{}{
 		"contents": []map[string]interface{}{{
 			"role":  "user",
-			"parts": []map[string]string{{"text": translatePrompt + text}},
+			"parts": []map[string]string{{"text": prompt}},
 		}},
 		"generationConfig": map[string]interface{}{"temperature": 0},
 	}

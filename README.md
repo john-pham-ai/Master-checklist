@@ -25,6 +25,43 @@ header.
 - Disengagement checks: Run ID, Closed Loop Run ID, steering left, steering right,
   accel, brake, cruise control, e-stop, AD/MD button
 
+## "What changed since the previous build"
+
+The first section of the form summarises what changed in `brain2` between the selected Tag
+and the previous tag of the same kind (e.g. `trucking-scheduled-night-2026-08-31` →
+`…-2026-09-01`; for Candidate runs the previous `trucking-candidate-*` tag). Only the
+tester's selection is diffed — never the whole history. The base tag can be overridden in
+**Compare against**. `GET /api/diff?head=<tag>[&base=<tag>]` does the work (`diff.go`) and the
+browser posts the rendered JSON back with the form so the same summary lands at the top of
+the Confluence page, along with optional tester notes.
+
+It is written for non-technical readers:
+
+- Headline sentence: `Aug 31 → Sep 1: 92 changes in total — HMI 0 · Behavior 1 · Planner 4 …`
+- Each area shows a one-line explanation ("what the driver sees and hears") and lists only
+  **described** changes as a clean headline (Jira key, `(#PR)` and `[Team]` tags stripped) plus
+  the first line of the PR description; ticket/PR/tags/paths sit behind a **Details** toggle.
+- Automated or housekeeping commits (`Vehicle OS Change` Copybara syncs, `[auto]` bumps,
+  lockfile updates) are never listed — they are **counted**: "N more automated or undescribed
+  changes also touched this area".
+- Everything outside the five areas is a single count line: "N other changes outside these
+  areas (M automated system updates) — Full list on GitHub".
+
+Classification is by the paths each commit touched (one GitHub call per commit, up to 200,
+cached 30 min) plus keywords in the title:
+
+| Category | Paths | Title keywords |
+|---|---|---|
+| HMI | `onroad/hmi/`, `trucking/hmi/`, `vehicle_os/hmi/` | `hmi` |
+| Behavior | `onroad/behavior/` (except planning/prediction), `common/behavior/`, `onroad/ml/behavior/`, `trucking/fallback/behavior*` | `behavior` |
+| Planner | `onroad/behavior/planning/`, `onroad/cmas/planning/`, `trucking/planning/`, `trucking/fallback/planning*`, `trucking/interfaces/*planner_nodes/` | `planner`, `planning` |
+| Prediction | `onroad/behavior/prediction/`, `onroad/ml_optimization/prediction/` | `prediction`, `predictor` |
+| Bug fixes & reverts | any of the above or none | `fix`, `bug`, `hotfix`, `regression`, `crash`, `resolve`, `revert` |
+
+A commit can appear under several categories. When the app's service account has
+`roles/aiplatform.user`, Gemini also writes an "In short" bullet summary in plain language
+(`ai_summary`); otherwise that part is omitted with a note.
+
 ## Test Engineer autofill
 
 The Test Engineer field is pre-filled with the signed-in user's name (derived from the

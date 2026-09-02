@@ -139,6 +139,27 @@ textarea {
 .notice { margin-top: 1rem; padding: 0.8rem 1rem; border: 1px dashed var(--accent); border-radius: 8px; }
 .notice p { margin-top: 0; }
 
+.diff-actions { display: flex; gap: 0.75rem; align-items: center; }
+.diff-headline { font-size: 1rem; margin: 0.4rem 0 0.8rem; }
+.diff-cat { border-top: 1px solid var(--border); padding: 0.5rem 0; }
+.diff-cat > summary { cursor: pointer; font-size: 0.95rem; }
+.diff-explain { font-weight: normal; }
+.diff-list { margin: 0.4rem 0 0; padding-left: 1.2rem; }
+.diff-list li { margin: 0.5rem 0; }
+.diff-list a.diff-title { color: var(--accent); text-decoration: none; font-weight: 500; }
+.diff-list a:hover { text-decoration: underline; }
+.diff-desc { margin-top: 0.15rem; }
+.diff-meta { margin-top: 0.15rem; }
+.diff-meta > summary { cursor: pointer; display: inline; }
+.diff-files { word-break: break-all; }
+.diff-other { margin-top: 0.8rem; }
+.diff-dirs { margin-left: 0.5rem; }
+.diff-ai { padding: 0.6rem 0.8rem; margin-bottom: 0.6rem; border-left: 3px solid var(--accent); background: rgba(77,159,255,0.06); }
+.badge { display: inline-block; margin-left: 0.4rem; padding: 0 0.4rem; border-radius: 4px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; border: 1px solid var(--border); color: var(--muted); }
+.badge-fix { border-color: var(--pass); color: var(--pass); }
+.badge-revert { border-color: var(--fail); color: var(--fail); }
+.muted.small.error { color: var(--fail); }
+
 footer {
   text-align: center;
   padding: 1.5rem;

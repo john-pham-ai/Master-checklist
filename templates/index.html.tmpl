@@ -20,6 +20,31 @@
 </header>
 
 <form id="checklist-form" method="post" action="/submit">
+  <section class="card" id="diff-card">
+    <h2 data-i18n="section_diff">What changed since the previous build</h2>
+    <div class="grid">
+      <label>
+        <span data-i18n="field_diff_base">Compare against</span>
+        <input type="text" name="diff_base" id="diff-base" list="diff-base-suggestions" autocomplete="off" data-i18n-placeholder="diff_base_placeholder" placeholder="auto: the previous build of the same kind">
+        <datalist id="diff-base-suggestions"></datalist>
+      </label>
+      <label>
+        <span>&nbsp;</span>
+        <span class="diff-actions">
+          <button type="button" id="diff-reload" data-i18n="diff_reload">Reload changes</button>
+          <a id="diff-compare-link" class="field-hint" href="#" target="_blank" rel="noopener" hidden data-i18n="diff_compare_link">Full list on GitHub</a>
+        </span>
+      </label>
+    </div>
+    <p id="diff-status" class="muted small" data-i18n="diff_hint">Choose a Tag below — the changes since the previous build load automatically.</p>
+    <div id="diff-results"></div>
+    <label class="stack">
+      <span data-i18n="field_diff_notes">Notes on the changes (optional — included on the Confluence page)</span>
+      <textarea name="diff_notes" id="diff-notes" rows="3" data-i18n-placeholder="diff_notes_placeholder" placeholder="Anything to call out for this build?"></textarea>
+    </label>
+    <input type="hidden" name="diff_json" id="diff-json">
+  </section>
+
   <section class="card">
     <h2 data-i18n="section_run_info">Run Info</h2>
     <div class="grid">

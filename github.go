@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"sort"
@@ -20,6 +22,31 @@ const maxTagPages = 20
 
 // nextLinkRe extracts the rel="next" URL from a GitHub Link header.
 var nextLinkRe = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
+
+// githubGetJSON performs an authenticated GET against the GitHub REST API and
+// decodes the JSON response into out.
+func githubGetJSON(ctx context.Context, token, u string, out interface{}) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 300))
+		if resp.StatusCode == http.StatusForbidden && resp.Header.Get("X-RateLimit-Remaining") == "0" {
+			return fmt.Errorf("github rate limit exhausted (resets at %s)", resp.Header.Get("X-RateLimit-Reset"))
+		}
+		return fmt.Errorf("github %s: %s", resp.Status, strings.TrimSpace(string(b)))
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
+}
 
 // fetchGithubTags lists ALL tag names for owner/repo via the GitHub REST API,
 // following Link-header pagination, using a personal access token for auth

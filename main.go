@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -135,6 +136,14 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			DisengagementClosedLoopRunID: r.FormValue("disengagement_closed_loop_run_id"),
 		}
 
+		// The browser posts back the diff summary it rendered (JSON produced by
+		// /api/diff) plus the tester's optional notes.
+		if d, err := parseDiffJSON(r.FormValue("diff_json")); err != nil {
+			log.Printf("ignoring invalid diff_json: %v", err)
+		} else if d != nil {
+			report.Diff = toConfluenceDiff(d, r.FormValue("diff_notes"))
+		}
+
 		parentPageID := cfg.ParentPageID
 		if isCandidate {
 			parentPageID = cfg.CandidateParentPageID
@@ -204,13 +213,14 @@ type tagCache struct {
 const tagCacheTTL = 60 * time.Second
 
 var dryRunSampleTags = []string{
-	"v1.42.0-scheduled-night-2026-08-31",
-	"v1.41.0-scheduled-night-2026-08-30",
-	"v1.42.0-candidate-1",
-	"v1.42.0-candidate-2",
+	"trucking-scheduled-night-2026-09-01",
+	"trucking-scheduled-night-2026-08-31",
+	"trucking-scheduled-night-2026-08-30",
+	"trucking-candidate-2026-08-26-01",
+	"trucking-candidate-2026-08-26-00",
 }
 
-func (c *tagCache) Get(r *http.Request) ([]string, error) {
+func (c *tagCache) Get(ctx context.Context) ([]string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -222,7 +232,7 @@ func (c *tagCache) Get(r *http.Request) ([]string, error) {
 		return c.tags, nil
 	}
 
-	token, err := c.cfg.GithubToken.Get(r.Context())
+	token, err := c.cfg.GithubToken.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -236,10 +246,9 @@ func (c *tagCache) Get(r *http.Request) ([]string, error) {
 	return tags, nil
 }
 
-func makeTagsHandler(cfg config) http.HandlerFunc {
-	cache := &tagCache{cfg: cfg}
+func makeTagsHandler(cache *tagCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tags, err := cache.Get(r)
+		tags, err := cache.Get(r.Context())
 		if err != nil {
 			log.Printf("fetchGithubTags error: %v", err)
 			http.Error(w, "failed to fetch tags", http.StatusBadGateway)
@@ -254,6 +263,27 @@ func makeTagsHandler(cfg config) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(filterTags(tags, filterWord))
 	}
+}
+
+// toConfluenceDiff converts the API's diff summary into the renderer's type.
+func toConfluenceDiff(d *diffSummary, notes string) *confluence.DiffSummary {
+	out := &confluence.DiffSummary{
+		Repo: d.Repo, Base: d.Base, Head: d.Head, BaseDate: d.BaseDate, HeadDate: d.HeadDate,
+		CompareURL: d.CompareURL, TotalCommits: d.TotalCommits,
+		OtherCount: d.OtherCount, OtherAutomated: d.OtherAutomated,
+		AISummary: d.AISummary, Notes: strings.TrimSpace(notes),
+	}
+	for _, c := range d.Categories {
+		cat := confluence.DiffCategory{Key: c.Key, Label: c.Label, Undescribed: c.Undescribed}
+		for _, it := range c.Items {
+			cat.Items = append(cat.Items, confluence.DiffItem{
+				Title: it.Title, Headline: it.Headline, URL: it.URL, Summary: it.Summary,
+				Jira: it.Jira, PR: it.PR, Tags: it.Tags, IsFix: it.IsFix, IsRevert: it.IsRevert,
+			})
+		}
+		out.Categories = append(out.Categories, cat)
+	}
+	return out
 }
 
 // confluenceErrorText turns a client error into the message shown to the test
@@ -286,13 +316,17 @@ func monthTitleFromDate(date string) string {
 func main() {
 	cfg := loadConfig()
 
+	tags := &tagCache{cfg: cfg}
+	tr := newTranslator(cfg.ProjectID, cfg.DryRun)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", makeIndexHandler(parseVehicleRange(cfg.VehicleRange)))
 	mux.HandleFunc("/submit", makeSubmitHandler(cfg))
-	mux.HandleFunc("/api/tags", makeTagsHandler(cfg))
+	mux.HandleFunc("/api/tags", makeTagsHandler(tags))
+	mux.HandleFunc("/api/diff", newDiffService(cfg, tags, tr).handle)
 	mux.HandleFunc("/api/engineers", makeEngineersHandler(newEngineerSource(cfg.EngineerGroups, cfg.DryRun)))
 
-	feedback := &feedbackService{cfg: cfg, data: newDataAPI(), tr: newTranslator(cfg.ProjectID, cfg.DryRun)}
+	feedback := &feedbackService{cfg: cfg, data: newDataAPI(), tr: tr}
 	mux.HandleFunc("/feedback", feedback.handleForm)
 	mux.HandleFunc("/api/feedback", feedback.handleSubmit)
 	mux.HandleFunc("/api/feedback/connect", feedback.handleConnect)

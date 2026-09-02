@@ -92,17 +92,20 @@
   }
 
   const tagList = document.getElementById("tag-suggestions");
+  let knownTags = [];
   function loadTagSuggestions() {
     if (!testTypeSelect || !tagList) return;
     fetch(`/api/tags?test_type=${encodeURIComponent(testTypeSelect.value)}`)
       .then((r) => r.json())
       .then((tags) => {
+        knownTags = Array.isArray(tags) ? tags : [];
         tagList.innerHTML = "";
-        tags.forEach((tag) => {
+        knownTags.forEach((tag) => {
           const option = document.createElement("option");
           option.value = tag;
           tagList.appendChild(option);
         });
+        maybeLoadDiff();
       })
       .catch((err) => console.error("failed to load tag suggestions", err));
   }
@@ -110,6 +113,177 @@
   if (testTypeSelect) {
     testTypeSelect.addEventListener("change", loadTagSuggestions);
   }
+
+  // ---- Master diff summary (changes since the previous build of the same kind) ----
+  const tagInput = document.querySelector('input[name="tag"]');
+  const diffBase = document.getElementById("diff-base");
+  const diffBaseList = document.getElementById("diff-base-suggestions");
+  const diffStatus = document.getElementById("diff-status");
+  const diffResults = document.getElementById("diff-results");
+  const diffJson = document.getElementById("diff-json");
+  const diffLink = document.getElementById("diff-compare-link");
+  const diffReload = document.getElementById("diff-reload");
+  const t = (k, fb) => (window.checklistI18n ? window.checklistI18n.t(k, fb) : fb);
+  const tagFamily = (tag) => tag.replace(/\d{4}-\d{2}-\d{2}(-\d+)?$/, "");
+  let lastDiffKey = "";
+  let diffTimer = null;
+
+  function setDiffStatus(text, kind) {
+    if (!diffStatus) return;
+    diffStatus.textContent = text;
+    diffStatus.className = "muted small" + (kind ? " " + kind : "");
+  }
+
+  function fillBaseSuggestions(head) {
+    if (!diffBaseList) return;
+    diffBaseList.innerHTML = "";
+    const fam = tagFamily(head);
+    knownTags.filter((x) => x !== head && tagFamily(x) === fam).forEach((x) => {
+      const o = document.createElement("option");
+      o.value = x;
+      diffBaseList.appendChild(o);
+    });
+  }
+
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  // "2026-09-01" -> "Sep 1"; "2026-08-26-01" -> "Aug 26 #01" (localised month names via i18n).
+  function friendlyDate(stamp) {
+    if (!stamp || stamp.length < 10) return stamp || "";
+    const [y, m, d] = stamp.slice(0, 10).split("-").map(Number);
+    if (!m || !d) return stamp;
+    const months = (t("months_short", "Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec")).split(",");
+    const lang = window.checklistI18n ? window.checklistI18n.lang() : "en";
+    let s = lang === "ja" ? `${m}月${d}日` : `${months[m - 1]} ${d}`;
+    if (stamp.length > 11) s += " #" + stamp.slice(11);
+    return s;
+  }
+
+  function renderDiff(d) {
+    diffResults.innerHTML = "";
+    if (diffLink) {
+      diffLink.href = d.compare_url || "#";
+      diffLink.hidden = !d.compare_url;
+    }
+
+    // Headline sentence: "Aug 31 → Sep 1: 92 changes — HMI 0 · Behavior 1 · …"
+    const head = el("p", "diff-headline");
+    const from = friendlyDate(d.base_date) || d.base, to = friendlyDate(d.head_date) || d.head;
+    head.appendChild(el("strong", "", `${from} → ${to}`));
+    const counts = d.categories.map((c) => `${t("cat_" + c.key, c.label)} ${c.items.length + c.undescribed}`).join(" · ");
+    head.appendChild(document.createTextNode(`: ${d.total_commits} ${t("diff_changes", "changes in total")} — ${counts}`));
+    diffResults.appendChild(head);
+
+    if (d.ai_summary) {
+      const box = el("div", "diff-ai");
+      box.appendChild(el("strong", "", t("diff_ai_summary", "In short")));
+      d.ai_summary.split("\n").forEach((line) => { if (line.trim()) box.appendChild(el("div", "", line.replace(/^-\s*/, "• "))); });
+      diffResults.appendChild(box);
+    }
+
+    d.categories.forEach((c) => {
+      const total = c.items.length + c.undescribed;
+      const details = el("details", "diff-cat");
+      const summary = el("summary");
+      summary.appendChild(el("strong", "", t("cat_" + c.key, c.label)));
+      summary.appendChild(document.createTextNode(` (${total})`));
+      summary.appendChild(el("span", "muted small diff-explain", " — " + t("cat_" + c.key + "_desc", "")));
+      details.appendChild(summary);
+      details.open = c.items.length > 0;
+      if (total === 0) {
+        details.appendChild(el("p", "muted small", t("diff_no_items", "No changes")));
+        diffResults.appendChild(details);
+        return;
+      }
+      if (c.items.length) {
+        const ul = el("ul", "diff-list");
+        c.items.forEach((it) => {
+          const li = el("li");
+          const a = el("a", "diff-title", it.headline || it.title);
+          a.href = it.url; a.target = "_blank"; a.rel = "noopener";
+          li.appendChild(a);
+          if (it.is_revert) li.appendChild(el("span", "badge badge-revert", t("badge_revert", "reverted")));
+          else if (it.is_fix && c.key !== "fixes") li.appendChild(el("span", "badge badge-fix", t("badge_fix", "fix")));
+          if (it.summary) li.appendChild(el("div", "diff-desc", it.summary));
+          const meta = [];
+          if (it.pr) meta.push(`PR #${it.pr}`);
+          if (it.jira) meta.push(it.jira);
+          if (it.tags && it.tags.length) meta.push(it.tags.join(", "));
+          if (it.dirs && it.dirs.length) meta.push(it.dirs.join(", "));
+          if (meta.length) {
+            const md = el("details", "diff-meta");
+            md.appendChild(el("summary", "muted small", t("diff_details", "Details")));
+            md.appendChild(el("div", "muted small", meta.join(" · ")));
+            if (it.files && it.files.length) md.appendChild(el("div", "muted small diff-files", it.files.join(", ")));
+            li.appendChild(md);
+          }
+          ul.appendChild(li);
+        });
+        details.appendChild(ul);
+      }
+      if (c.undescribed > 0) {
+        details.appendChild(el("p", "muted small", `${c.undescribed} ${t("diff_undescribed", "more automated or undescribed changes also touched this area")}`));
+      }
+      diffResults.appendChild(details);
+    });
+
+    if (d.other_count > 0) {
+      const p = el("p", "muted diff-other");
+      let text = `${d.other_count} ${t("diff_other_line", "other changes outside these areas")}`;
+      if (d.other_automated > 0) text += ` (${d.other_automated} ${t("diff_automated", "automated system updates")})`;
+      p.appendChild(document.createTextNode(text + " — "));
+      const a = el("a", "", t("diff_compare_link", "Open compare on GitHub"));
+      a.href = d.compare_url || "#"; a.target = "_blank"; a.rel = "noopener";
+      p.appendChild(a);
+      diffResults.appendChild(p);
+    }
+    if (d.note) diffResults.appendChild(el("p", "muted small", d.note));
+    if (d.truncated) diffResults.appendChild(el("p", "muted small", t("diff_truncated", "Large diff: some changes were classified by title only.")));
+  }
+
+  function maybeLoadDiff(force) {
+    if (!tagInput || !diffResults) return;
+    const head = tagInput.value.trim();
+    if (!head || (!force && !knownTags.includes(head))) return;
+    const base = diffBase ? diffBase.value.trim() : "";
+    const key = head + "|" + base;
+    if (!force && key === lastDiffKey) return;
+    lastDiffKey = key;
+    fillBaseSuggestions(head);
+    setDiffStatus(t("diff_loading", "Loading changes…"), "");
+    diffResults.innerHTML = "";
+    if (diffJson) diffJson.value = "";
+    const q = new URLSearchParams({ head });
+    if (base) q.set("base", base);
+    fetch(`/api/diff?${q}`)
+      .then(async (r) => ({ ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) }))
+      .then(({ ok, status, data }) => {
+        if (!ok) {
+          setDiffStatus(t("diff_error", "Could not load the diff:") + " " + (data.error || status), "error");
+          return;
+        }
+        if (diffBase && !diffBase.value) diffBase.placeholder = data.base;
+        setDiffStatus(`${t("diff_builds", "Builds compared")}: ${data.base} → ${data.head}`, "");
+        renderDiff(data);
+        if (diffJson) diffJson.value = JSON.stringify(data);
+      })
+      .catch((err) => setDiffStatus(t("diff_error", "Could not load the diff:") + " " + err, "error"));
+  }
+
+  if (tagInput) {
+    tagInput.addEventListener("change", () => maybeLoadDiff(false));
+    tagInput.addEventListener("input", () => {
+      clearTimeout(diffTimer);
+      diffTimer = setTimeout(() => maybeLoadDiff(false), 600);
+    });
+  }
+  if (diffBase) diffBase.addEventListener("change", () => maybeLoadDiff(true));
+  if (diffReload) diffReload.addEventListener("click", () => maybeLoadDiff(true));
 
   // Test Engineer suggestions: members of the access groups (see engineers.go).
   // The field itself is pre-filled server-side with the signed-in user's name.
