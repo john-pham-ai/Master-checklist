@@ -96,6 +96,10 @@ type config struct {
 	// EngineerGroups is the comma-separated list of Google/Okta groups whose
 	// members are suggested in the Test Engineer field.
 	EngineerGroups string
+
+	// VehicleRange is the inclusive vehicle ID range(s) suggested in the
+	// Vehicle field, e.g. "801-835".
+	VehicleRange string
 }
 
 func loadConfig() config {
@@ -115,6 +119,7 @@ func loadConfig() config {
 		GithubToken: newTokenSource("github-token", "GITHUB_TOKEN", dryRun),
 
 		EngineerGroups: envOrDefault("ENGINEER_GROUPS", defaultEngineerGroups),
+		VehicleRange:   envOrDefault("VEHICLE_RANGE", defaultVehicleRange),
 	}
 }
 

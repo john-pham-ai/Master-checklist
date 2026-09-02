@@ -15,9 +15,10 @@ header.
 
 - Test Type (Master Testing / Candidate Testing), Tag (autocompletes from GitHub tags on
   [Ext-Applied-Frontier/brain2](https://github.com/Ext-Applied-Frontier/brain2/tags) —
-  `scheduled-night` tags for Master, `candidate` tags for Candidate), Date, Vehicle,
-  Test Engineer, Commit Hash, Slack Thread, Recording (Google Drive link), Run ID,
-  Overall Result
+  `scheduled-night` tags for Master, `candidate` tags for Candidate), Date, Vehicle
+  (autofill 801–835, see `VEHICLE_RANGE`), Test Engineer (pre-filled with the signed-in
+  user, autofill from the access groups), Commit Hash, Slack Thread, Recording (Google
+  Drive link), Run ID, Overall Result
 - Preflight: `run_syscheck` results, `check_timesync` results, software build & launch,
   health monitor healthy, logs recording in `/media/hotswap1/frontier/`
 - Engagement checks
@@ -82,6 +83,7 @@ CONFLUENCE_TOKEN="<atlassian-api-token>" GITHUB_TOKEN="<github-pat>" go run .
 | `ADDR` | `:8080` | HTTP listen address |
 | `CONFLUENCE_DRY_RUN` | `false` | Skip Secret Manager + Confluence/GitHub calls, log instead |
 | `ENGINEER_GROUPS` | vehicle-testing, ext-frontier, ext-vehicle_operators-jp | Groups whose members populate the Test Engineer dropdown |
+| `VEHICLE_RANGE` | `801-835` | Vehicle IDs offered in the Vehicle dropdown; ranges and/or single IDs, comma-separated (e.g. `801-840,900`) |
 | `CONFLUENCE_TOKEN` | — | Local dev only: use this Atlassian API token instead of Secret Manager |
 | `GITHUB_TOKEN` | — | Local dev only: use this GitHub PAT instead of Secret Manager |
 

@@ -40,7 +40,8 @@
       </label>
       <label>
         <span data-i18n="field_vehicle">Vehicle</span>
-        <input type="text" name="vehicle" required>
+        <input type="text" name="vehicle" list="vehicle-suggestions" autocomplete="off" inputmode="numeric" required>
+        <datalist id="vehicle-suggestions">{{range .Vehicles}}<option value="{{.}}"></option>{{end}}</datalist>
       </label>
       <label>
         <span data-i18n="field_test_engineer">Test Engineer</span>

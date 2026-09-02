@@ -62,24 +62,28 @@ type formData struct {
 	DisengagementChecks []checkSpec
 	Today               string
 	GithubURL           string
-	CurrentEngineer     string // signed-in user's name (from IAP), pre-fills Test Engineer
+	CurrentEngineer     string   // signed-in user's name (from IAP), pre-fills Test Engineer
+	Vehicles            []string // Vehicle field autofill options, e.g. 801..835
 }
 
 const githubURL = "https://github.com/john-pham-ai/Master-checklist"
 
-func handleIndex(w http.ResponseWriter, r *http.Request) {
-	data := formData{
-		PreflightChecks:     preflightChecks,
-		EngagementChecks:    engagementChecks,
-		DisengagementChecks: disengagementChecks,
-		Today:               time.Now().Format("2006-01-02"),
-		GithubURL:           githubURL,
-		CurrentEngineer:     currentEngineerName(r),
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := pageTemplate.Execute(w, data); err != nil {
-		log.Printf("template execute error: %v", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+func makeIndexHandler(vehicles []string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data := formData{
+			PreflightChecks:     preflightChecks,
+			EngagementChecks:    engagementChecks,
+			DisengagementChecks: disengagementChecks,
+			Today:               time.Now().Format("2006-01-02"),
+			GithubURL:           githubURL,
+			CurrentEngineer:     currentEngineerName(r),
+			Vehicles:            vehicles,
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := pageTemplate.Execute(w, data); err != nil {
+			log.Printf("template execute error: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -281,7 +285,7 @@ func main() {
 	cfg := loadConfig()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", handleIndex)
+	mux.HandleFunc("/", makeIndexHandler(parseVehicleRange(cfg.VehicleRange)))
 	mux.HandleFunc("/submit", makeSubmitHandler(cfg))
 	mux.HandleFunc("/api/tags", makeTagsHandler(cfg))
 	mux.HandleFunc("/api/engineers", makeEngineersHandler(newEngineerSource(cfg.EngineerGroups, cfg.DryRun)))
