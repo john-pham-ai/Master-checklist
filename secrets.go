@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
@@ -14,31 +15,44 @@ import (
 // secret names with it for isolation (see README "Secrets" section).
 const appName = "master-checklist"
 
+// tokenCacheTTL bounds how long a fetched secret is reused. A rotated secret
+// (e.g. `apps-platform app secret set confluence-token ...`) therefore takes
+// effect within this window without redeploying or restarting the instance.
+const tokenCacheTTL = 5 * time.Minute
+
 // tokenSource lazily fetches and caches a named Secret Manager secret.
 // Fetching is deferred until a request actually needs it, so the server can
 // start (and pass Cloud Run's health check) even before the secret has been
 // set.
+//
+// For local development, envVar (e.g. CONFLUENCE_TOKEN) overrides Secret
+// Manager entirely so the real integration can be exercised with `go run .`.
 type tokenSource struct {
 	secretName string // e.g. "confluence-token"; apps-platform prefixes it with appName
+	envVar     string // e.g. "CONFLUENCE_TOKEN"; if set in the environment, used verbatim
 	dryRun     bool
 	dryRunVal  string
 
-	mu    sync.Mutex
-	cache string
+	mu        sync.Mutex
+	cache     string
+	fetchedAt time.Time
 }
 
-func newTokenSource(secretName string, dryRun bool) *tokenSource {
-	return &tokenSource{secretName: secretName, dryRun: dryRun, dryRunVal: "dry-run-" + secretName}
+func newTokenSource(secretName, envVar string, dryRun bool) *tokenSource {
+	return &tokenSource{secretName: secretName, envVar: envVar, dryRun: dryRun, dryRunVal: "dry-run-" + secretName}
 }
 
 func (t *tokenSource) Get(ctx context.Context) (string, error) {
 	if t.dryRun {
 		return t.dryRunVal, nil
 	}
+	if v := os.Getenv(t.envVar); v != "" {
+		return v, nil
+	}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.cache != "" {
+	if t.cache != "" && time.Since(t.fetchedAt) < tokenCacheTTL {
 		return t.cache, nil
 	}
 
@@ -61,6 +75,7 @@ func (t *tokenSource) Get(ctx context.Context) (string, error) {
 	}
 
 	t.cache = string(result.Payload.Data)
+	t.fetchedAt = time.Now()
 	return t.cache, nil
 }
 
@@ -89,11 +104,11 @@ func loadConfig() config {
 		BotEmail:              os.Getenv("CONFLUENCE_BOT_EMAIL"),
 		Addr:                  listenAddr(),
 		DryRun:                dryRun,
-		Token:                 newTokenSource("confluence-token", dryRun),
+		Token:                 newTokenSource("confluence-token", "CONFLUENCE_TOKEN", dryRun),
 
 		GithubOwner: envOrDefault("GITHUB_TAG_REPO_OWNER", "Ext-Applied-Frontier"),
 		GithubRepo:  envOrDefault("GITHUB_TAG_REPO_NAME", "brain2"),
-		GithubToken: newTokenSource("github-token", dryRun),
+		GithubToken: newTokenSource("github-token", "GITHUB_TOKEN", dryRun),
 	}
 }
 

@@ -40,6 +40,13 @@ CONFLUENCE_DRY_RUN=true go run .
 
 Then open http://localhost:8080.
 
+To exercise the real Confluence/GitHub integrations locally, bypass Secret Manager by
+passing the tokens as env vars (never commit these):
+
+```sh
+CONFLUENCE_TOKEN="<atlassian-api-token>" GITHUB_TOKEN="<github-pat>" go run .
+```
+
 ## Config (env vars)
 
 | Var | Default | Purpose |
@@ -53,21 +60,45 @@ Then open http://localhost:8080.
 | `GITHUB_TAG_REPO_NAME` | `brain2` | Repo to autocomplete tags from |
 | `ADDR` | `:8080` | HTTP listen address |
 | `CONFLUENCE_DRY_RUN` | `false` | Skip Secret Manager + Confluence/GitHub calls, log instead |
+| `CONFLUENCE_TOKEN` | — | Local dev only: use this Atlassian API token instead of Secret Manager |
+| `GITHUB_TOKEN` | — | Local dev only: use this GitHub PAT instead of Secret Manager |
 
 ## Secrets & deploy (apps-platform)
 
-`project.toml` has `enable_secrets = true`. Upload the Confluence API token and a GitHub
-personal access token (needs read access to `Ext-Applied-Frontier/brain2`) once:
+`project.toml` has `enable_secrets = true`. Upload the two tokens once per environment:
+
+- `confluence-token` — an **Atlassian API token** created by the `CONFLUENCE_BOT_EMAIL`
+  account at https://id.atlassian.com/manage-profile/security/api-tokens (starts with
+  `ATATT3…`). Confluence reports a bad/foreign token as an *anonymous* caller (v1 403
+  "cannot access Confluence", v2 404 NOT_FOUND) rather than a 401, so a wrong token
+  looks like an outage in the UI.
+- `github-token` — a GitHub PAT that can read `Ext-Applied-Frontier/brain2`. For a
+  fine-grained PAT the **resource owner must be the `Ext-Applied-Frontier` org** with
+  `brain2` selected and `Contents: Read`; a personal-owner PAT sees the org but gets
+  404 on the repo. A classic PAT needs the `repo` scope and SSO authorization for the org.
 
 ```sh
-apps-platform app secret set confluence-token "<api-token>"
-apps-platform app secret set github-token "<personal-access-token>"
+# staging (default profile)
+apps-platform app secret set confluence-token "<atlassian-api-token>"
+apps-platform app secret set github-token "<github-pat>"
 apps-platform app deploy
+
+# prod
+apps-platform app --environment experimental-prod secret set confluence-token "<atlassian-api-token>"
+apps-platform app --environment experimental-prod secret set github-token "<github-pat>"
+apps-platform app --environment experimental-prod deploy
 ```
 
 The app reads these back at
-`projects/$PROJECT_ID/secrets/master-checklist-<name>-token/versions/latest`
-via the Secret Manager client — see `secrets.go`.
+`projects/$PROJECT_ID/secrets/master-checklist-<name>/versions/latest` via the Secret
+Manager client and caches each value for 5 minutes (`secrets.go`), so a rotated secret
+takes effect without a redeploy.
+
+Deploys go to the profile in `~/.apps-platform/environment.yaml` (`experimental-staging`
+→ `master-checklist.experimental.staging.apps.applied.dev`; `experimental-prod` →
+`master-checklist.experimental.apps.applied.dev`). Note: `gcloud` ≥ 583 breaks
+`apps-platform app deploy` with `PERMISSION_DENIED run.locations.uploadSource`; pin
+`gcloud components update --version 570.0.0` until the platform team fixes it.
 
 ## Access control
 

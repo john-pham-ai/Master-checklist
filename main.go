@@ -3,9 +3,11 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -158,14 +160,14 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 		monthPageID, err := client.FindOrCreateMonthPage(monthTitle)
 		if err != nil {
 			log.Printf("FindOrCreateMonthPage error: %v", err)
-			http.Error(w, "failed to reach Confluence", http.StatusBadGateway)
+			http.Error(w, confluenceErrorText("look up the month page", err), http.StatusBadGateway)
 			return
 		}
 
 		pageURL, err := client.CreateRunPage(monthPageID, title, body)
 		if err != nil {
 			log.Printf("CreateRunPage error: %v", err)
-			http.Error(w, "failed to create Confluence page", http.StatusBadGateway)
+			http.Error(w, confluenceErrorText("create the run page", err), http.StatusBadGateway)
 			return
 		}
 
@@ -244,6 +246,25 @@ func makeTagsHandler(cfg config) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(filterTags(tags, filterWord))
 	}
+}
+
+// confluenceErrorText turns a client error into the message shown to the test
+// engineer. Auth failures are called out explicitly because Confluence reports
+// a bad API token as an anonymous caller (v1: 403 "cannot access Confluence",
+// v2: 404 NOT_FOUND) rather than a 401, which otherwise reads like an outage.
+func confluenceErrorText(action string, err error) string {
+	msg := err.Error()
+	if strings.Contains(msg, "already exists") {
+		return "A Confluence page with this title already exists — the title is built from Tag, Date and Run ID, " +
+			"so this exact run has already been filed. Change the Run ID (or delete the existing page) and submit again. " +
+			"(" + msg + ")"
+	}
+	if strings.Contains(msg, "403") || strings.Contains(msg, "404") || strings.Contains(msg, "401") {
+		return fmt.Sprintf("Confluence rejected the request while trying to %s (%s). "+
+			"This usually means the confluence-token secret is not a valid Atlassian API token for CONFLUENCE_BOT_EMAIL, "+
+			"or that account cannot access the NEURON space.", action, msg)
+	}
+	return fmt.Sprintf("Failed to %s in Confluence: %s", action, msg)
 }
 
 func monthTitleFromDate(date string) string {
