@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"io/fs"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"sync"
@@ -69,32 +70,83 @@ func noCache(h http.Handler) http.Handler {
 
 const gatekeeperURL = "https://gatekeeper.experimental.apps.applied.dev/master-verification/trucking/new"
 
-// checkSpec describes one checklist line item rendered on the form.
+// maxSubmitBodyBytes bounds a whole /submit request (checklist fields plus
+// every pasted screenshot and recorded/attached clip). Screen recordings are
+// the largest thing this form accepts, hence the generous headroom.
+const maxSubmitBodyMB int64 = 500
+const maxSubmitBodyBytes = maxSubmitBodyMB << 20
+
+// checkSpec describes one checklist line item rendered on the form. Verify/
+// Pass/Fail are English fallback text rendered directly into the page (so it
+// is never blank before JS loads); the same content is translatable via
+// i18n keys "check_<Key>_verify" / "_pass" / "_fail" in i18n/*.json.
 type checkSpec struct {
-	Key   string
-	Label string
+	Key    string
+	Label  string
+	Verify string // how to perform this check
+	Pass   string // what a pass looks like
+	Fail   string // what a fail looks like
 }
 
 var preflightChecks = []checkSpec{
-	{"syscheck", "run_syscheck results"},
-	{"timesync", "check_timesync results"},
-	{"build_launch", "Software build and launch"},
-	{"health_monitor", "Health monitor is healthy"},
-	{"logs_recording", "Logs recording in /media/hotswap1/frontier/"},
+	{"syscheck", "run_syscheck results",
+		"Run `run_syscheck` on the vehicle and review its output in the terminal or log.",
+		"All subsystems report OK/green with no errors or warnings flagged.",
+		"Any subsystem reports an error, a timeout, or is missing from the output."},
+	{"timesync", "check_timesync results",
+		"Run `check_timesync` and review the reported clock offset for every ECU/sensor.",
+		"All components report a synchronized clock within the tool's tolerance threshold.",
+		"Any component reports clock drift beyond tolerance, or fails to report at all."},
+	{"build_launch", "Software build and launch",
+		"Confirm the target build is flashed and the AD stack launches cleanly; check the launch logs and process list.",
+		"The running build matches the intended Tag/commit hash and every process starts with no crash or restart loop.",
+		"The build does not match the intended Tag/commit hash, or any process crashes or fails to launch."},
+	{"health_monitor", "Health monitor is healthy",
+		"Open the health monitor dashboard and observe system status at idle and during a short drive.",
+		"Every component shows healthy/green status for the whole check with no persistent warnings or errors.",
+		"Any component shows a persistent warning or error, or drops out during the check."},
+	{"logs_recording", "Logs recording in /media/hotswap1/frontier/",
+		"After a short drive, check /media/hotswap1/frontier/ for log files created during this run.",
+		"New log files appear, are actively growing in size, and their timestamps match the run.",
+		"No new log files appear, files are empty or truncated, or timestamps don't match the run."},
 }
 
 var engagementChecks = []checkSpec{
-	{"engagement", "Engagement checks"},
+	{"engagement", "Engagement checks",
+		"Engage autonomy mode using the standard procedure and observe the takeover.",
+		"AD engages on the first attempt, the correct indicators/alerts fire, and control transitions cleanly to the vehicle.",
+		"Engagement fails, needs multiple attempts, throws an error, or the control transition is abrupt or unsafe."},
 }
 
 var disengagementChecks = []checkSpec{
-	{"steering_left", "Disengagement: steering left"},
-	{"steering_right", "Disengagement: steering right"},
-	{"accel", "Disengagement: accel"},
-	{"brake", "Disengagement: brake"},
-	{"cruise_control", "Disengagement: cruise control"},
-	{"e_stop", "Disengagement: e-stop"},
-	{"ad_md_button", "Disengagement: AD/MD button"},
+	{"steering_left", "Disengagement: steering left",
+		"With AD engaged, turn the steering wheel left with enough force to trigger a disengagement.",
+		"AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
+	{"steering_right", "Disengagement: steering right",
+		"With AD engaged, turn the steering wheel right with enough force to trigger a disengagement.",
+		"AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
+	{"accel", "Disengagement: accel",
+		"With AD engaged, press the accelerator pedal to trigger a disengagement.",
+		"AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
+	{"brake", "Disengagement: brake",
+		"With AD engaged, press the brake pedal to trigger a disengagement.",
+		"AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
+	{"cruise_control", "Disengagement: cruise control",
+		"With AD engaged, tap the cruise control stalk/button to trigger a disengagement.",
+		"AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
+	{"e_stop", "Disengagement: e-stop",
+		"With AD engaged, activate the e-stop to trigger a disengagement.",
+		"The vehicle disengages and comes to a safe stop immediately, with the correct alert/indicator.",
+		"The e-stop does not disengage AD, the stop is delayed, or the vehicle does not come to a safe stop."},
+	{"ad_md_button", "Disengagement: AD/MD button",
+		"With AD engaged, press the AD/MD button to trigger a disengagement.",
+		"AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
 }
 
 type formData struct {
@@ -131,17 +183,80 @@ func makeIndexHandler(vehicles []string) http.HandlerFunc {
 	}
 }
 
-func collectChecks(r *http.Request, specs []checkSpec) []confluence.CheckResult {
+// pendingUpload is a screenshot or clip parsed from the multipart form,
+// waiting to be uploaded as a Confluence attachment once the run page (and
+// so its page ID) exists. PageFilename is the exact name baked into the
+// check's media macro in the rendered page body (see collectChecks).
+type pendingUpload struct {
+	PageFilename string
+	Header       *multipart.FileHeader
+}
+
+// attachmentFilename builds a unique, predictable attachment name for one
+// check's Nth screenshot/clip, keeping the original extension when present
+// (Confluence and browsers both use it to pick a renderer/thumbnail).
+func attachmentFilename(checkKey, kind string, index int, originalName, fallbackExt string) string {
+	ext := fallbackExt
+	if dot := strings.LastIndex(originalName, "."); dot != -1 && dot < len(originalName)-1 {
+		ext = strings.ToLower(originalName[dot+1:])
+	}
+	return fmt.Sprintf("%s-%s-%d.%s", checkKey, kind, index+1, ext)
+}
+
+// collectChecks reads each check's radio/notes fields plus any pasted
+// screenshots ("media_screenshot_<key>") or attached/recorded clips
+// ("media_video_<key>") from the parsed multipart form. It returns the
+// check results (with Media referencing the filenames the attachments will
+// be uploaded under) and the matching list of files still to be uploaded.
+func collectChecks(r *http.Request, specs []checkSpec) ([]confluence.CheckResult, []pendingUpload) {
 	results := make([]confluence.CheckResult, 0, len(specs))
+	var uploads []pendingUpload
 	for _, spec := range specs {
-		results = append(results, confluence.CheckResult{
+		cr := confluence.CheckResult{
 			Key:    spec.Key,
 			Label:  spec.Label,
 			Result: r.FormValue("result_" + spec.Key),
 			Notes:  r.FormValue("notes_" + spec.Key),
-		})
+		}
+		if r.MultipartForm != nil {
+			for i, fh := range r.MultipartForm.File["media_screenshot_"+spec.Key] {
+				name := attachmentFilename(spec.Key, "screenshot", i, fh.Filename, "png")
+				cr.Media = append(cr.Media, confluence.MediaRef{Filename: name, Kind: "image"})
+				uploads = append(uploads, pendingUpload{PageFilename: name, Header: fh})
+			}
+			for i, fh := range r.MultipartForm.File["media_video_"+spec.Key] {
+				name := attachmentFilename(spec.Key, "clip", i, fh.Filename, "webm")
+				cr.Media = append(cr.Media, confluence.MediaRef{Filename: name, Kind: "video"})
+				uploads = append(uploads, pendingUpload{PageFilename: name, Header: fh})
+			}
+		}
+		results = append(results, cr)
 	}
-	return results
+	return results, uploads
+}
+
+// uploadPendingMedia attaches every pending screenshot/clip to the just-created
+// page. Uploads happen after the page (and its body's media macros) already
+// exist, so a failed upload never blocks the run page itself — it's logged
+// and surfaced as a warning on the confirmation screen instead.
+func uploadPendingMedia(client *confluence.Client, pageID string, uploads []pendingUpload) []string {
+	var warnings []string
+	for _, u := range uploads {
+		f, err := u.Header.Open()
+		if err != nil {
+			log.Printf("failed to open uploaded file %q: %v", u.Header.Filename, err)
+			warnings = append(warnings, u.PageFilename)
+			continue
+		}
+		contentType := u.Header.Header.Get("Content-Type")
+		err = client.UploadAttachment(pageID, u.PageFilename, contentType, f)
+		f.Close()
+		if err != nil {
+			log.Printf("failed to upload attachment %q: %v", u.PageFilename, err)
+			warnings = append(warnings, u.PageFilename)
+		}
+	}
+	return warnings
 }
 
 func makeSubmitHandler(cfg config) http.HandlerFunc {
@@ -150,13 +265,21 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if err := r.ParseForm(); err != nil {
-			http.Error(w, "bad form", http.StatusBadRequest)
+		// Screenshots/clips ride along as multipart parts; cap the whole
+		// request so a runaway recording can't exhaust server memory/disk.
+		r.Body = http.MaxBytesReader(w, r.Body, maxSubmitBodyBytes)
+		if err := r.ParseMultipartForm(32 << 20); err != nil {
+			http.Error(w, fmt.Sprintf("bad form (is it too large? limit is %dMB)", maxSubmitBodyMB), http.StatusBadRequest)
 			return
 		}
 
 		testType := r.FormValue("test_type")
 		isCandidate := testType == "candidate"
+
+		preflightResults, preflightUploads := collectChecks(r, preflightChecks)
+		engagementResults, engagementUploads := collectChecks(r, engagementChecks)
+		disengagementResults, disengagementUploads := collectChecks(r, disengagementChecks)
+		pendingMedia := append(append(preflightUploads, engagementUploads...), disengagementUploads...)
 
 		report := confluence.RunReport{
 			Tag:           r.FormValue("tag"),
@@ -169,9 +292,9 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			OverallResult: r.FormValue("overall_result"),
 			RunID:         r.FormValue("run_id"),
 
-			Preflight:     collectChecks(r, preflightChecks),
-			Engagement:    collectChecks(r, engagementChecks),
-			Disengagement: collectChecks(r, disengagementChecks),
+			Preflight:     preflightResults,
+			Engagement:    engagementResults,
+			Disengagement: disengagementResults,
 
 			DisengagementRunID:           r.FormValue("disengagement_run_id"),
 			DisengagementClosedLoopRunID: r.FormValue("disengagement_closed_loop_run_id"),
@@ -201,7 +324,8 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 		title := confluence.PageTitle(report)
 
 		if cfg.DryRun {
-			log.Printf("[dry-run] would create page %q under month page %q\n%s", title, monthTitle, body)
+			log.Printf("[dry-run] would create page %q under month page %q (with %d screenshot/clip attachment(s))\n%s",
+				title, monthTitle, len(pendingMedia), body)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Write([]byte(`<p>Dry run: page not actually created. See server logs for the rendered payload. <a href="/">Back</a></p>`))
 			return
@@ -222,12 +346,18 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			return
 		}
 
-		pageURL, err := client.CreateRunPage(monthPageID, title, body)
+		pageID, pageURL, err := client.CreateRunPage(monthPageID, title, body)
 		if err != nil {
 			log.Printf("CreateRunPage error: %v", err)
 			http.Error(w, confluenceErrorText("create the run page", err), http.StatusBadGateway)
 			return
 		}
+
+		// The page already renders (with placeholder media macros) before its
+		// screenshots/clips exist as attachments, so an upload failure here is
+		// only a warning, never a reason to fail a submission that otherwise
+		// succeeded — it's shown on the confirmation screen instead.
+		failedUploads := uploadPendingMedia(client, pageID, pendingMedia)
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := confirmTemplate.Execute(w, struct {
@@ -235,7 +365,8 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			GatekeeperURL  string
 			ShowGatekeeper bool
 			AssetVersion   string
-		}{PageURL: pageURL, GatekeeperURL: gatekeeperURL, ShowGatekeeper: !isCandidate, AssetVersion: assetVersion}); err != nil {
+			FailedUploads  []string
+		}{PageURL: pageURL, GatekeeperURL: gatekeeperURL, ShowGatekeeper: !isCandidate, AssetVersion: assetVersion, FailedUploads: failedUploads}); err != nil {
 			log.Printf("confirm template execute error: %v", err)
 		}
 	}

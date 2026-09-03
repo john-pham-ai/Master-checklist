@@ -34,6 +34,7 @@ func TestTemplatesExecute(t *testing.T) {
 		GatekeeperURL  string
 		ShowGatekeeper bool
 		AssetVersion   string
+		FailedUploads  []string
 	}{PageURL: "https://x/page", GatekeeperURL: gatekeeperURL, ShowGatekeeper: true, AssetVersion: assetVersion}); err != nil {
 		t.Fatalf("confirm template: %v", err)
 	}

@@ -12,6 +12,9 @@
 </header>
 <div class="card" style="max-width:640px;margin:2rem auto;">
   <p>Confluence page created: <a href="{{.PageURL}}" target="_blank" rel="noopener">{{.PageURL}}</a></p>
+  {{if .FailedUploads}}
+  <p class="status error">Some screenshots/clips failed to upload and are missing from the page: {{range $i, $f := .FailedUploads}}{{if $i}}, {{end}}{{$f}}{{end}}. Everything else on the page was created successfully.</p>
+  {{end}}
   {{if .ShowGatekeeper}}
   <p id="gatekeeper-status">Opening Gatekeeper in a new window&hellip;</p>
   <p><a id="gatekeeper-link" class="submit-btn" style="display:inline-block;text-decoration:none;text-align:center;" href="{{.GatekeeperURL}}" target="_blank" rel="noopener">Continue to Gatekeeper &rarr;</a></p>

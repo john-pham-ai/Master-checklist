@@ -148,5 +148,79 @@
   "feedback_connect_gmail": "Gmailを接続",
   "feedback_connecting": "ポップアップでGoogleの許可を完了してください…",
   "feedback_popup_blocked": "ブラウザがポップアップをブロックしました。このサイトのポップアップを許可して再試行してください。",
-  "feedback_error": "送信できませんでした。管理者へ直接メールしてください："
+  "feedback_error": "送信できませんでした。管理者へ直接メールしてください：",
+
+  "section_media_setup": "スクリーンショット・動画クリップ",
+  "media_setup_intro": "以下の各チェックには、スクリーンショットの貼り付けや動画クリップを追加できます。追加したファイルはConfluenceページに添付されます。画面録画・ウェブカメラ録画には初回のみブラウザの許可が必要です。テストを始める前にここで設定しておいてください。",
+  "media_setup_btn": "🔧 画面・ウェブカメラ録画を有効にする",
+  "media_setup_checking": "カメラ・マイクの許可を要求しています…",
+  "media_setup_ready": "準備完了 — 以下の各チェックから画面録画・ウェブカメラ録画を開始できます。",
+  "media_setup_error": "カメラ・マイクの許可が得られませんでした：",
+
+  "check_help_summary": "確認方法・合格/不合格の基準",
+  "check_help_verify_label": "確認方法：",
+  "check_help_pass_label": "合格：",
+  "check_help_fail_label": "不合格：",
+
+  "media_btn_screenshot": "📋 スクリーンショットを貼り付け/添付",
+  "media_btn_record_screen": "🖥️ 画面を録画",
+  "media_btn_record_cam": "🎥 ウェブカメラを録画",
+  "media_btn_attach_video": "📎 動画ファイルを添付",
+  "media_recording_stop": "⏹ 録画を停止",
+  "media_recording_status": "録画中…もう一度ボタンを押すと停止します。",
+  "media_permission_error": "録画を開始できませんでした：",
+  "media_unsupported": "このブラウザではサポートされていません",
+  "media_remove": "削除",
+
+  "check_syscheck_verify": "車両上で `run_syscheck` を実行し、端末またはログの出力を確認します。",
+  "check_syscheck_pass": "すべてのサブシステムがエラーや警告なしにOK/緑色を報告している。",
+  "check_syscheck_fail": "いずれかのサブシステムがエラー、タイムアウトを報告している、または出力に含まれていない。",
+
+  "check_timesync_verify": "`check_timesync` を実行し、各ECU/センサーの報告するクロックオフセットを確認します。",
+  "check_timesync_pass": "すべてのコンポーネントがツールの許容範囲内で同期したクロックを報告している。",
+  "check_timesync_fail": "いずれかのコンポーネントが許容範囲を超えたクロックドリフトを報告している、またはまったく報告していない。",
+
+  "check_build_launch_verify": "対象のビルドが書き込まれ、ADスタックが正常に起動することを確認します。起動ログとプロセス一覧を確認してください。",
+  "check_build_launch_pass": "実行中のビルドが意図したTag/コミットハッシュと一致し、すべてのプロセスがクラッシュや再起動ループなしに起動する。",
+  "check_build_launch_fail": "ビルドが意図したTag/コミットハッシュと一致しない、またはいずれかのプロセスがクラッシュする、もしくは起動に失敗する。",
+
+  "check_health_monitor_verify": "ヘルスモニターのダッシュボードを開き、停止中および短時間の走行中のシステム状態を確認します。",
+  "check_health_monitor_pass": "チェック中、すべてのコンポーネントが健全/緑色の状態を示し、継続的な警告やエラーがない。",
+  "check_health_monitor_fail": "いずれかのコンポーネントが継続的な警告やエラーを示す、またはチェック中に途切れる。",
+
+  "check_logs_recording_verify": "短時間の走行後、/media/hotswap1/frontier/ にこの実行中に作成されたログファイルがあるか確認します。",
+  "check_logs_recording_pass": "新しいログファイルが作成され、サイズが実際に増加しており、タイムスタンプが実行内容と一致している。",
+  "check_logs_recording_fail": "新しいログファイルが作成されない、ファイルが空/欠損している、またはタイムスタンプが実行内容と一致しない。",
+
+  "check_engagement_verify": "標準の手順に従って自動運転モードを起動し、権限の切り替わりを観察します。",
+  "check_engagement_pass": "1回目の試行でADが起動し、正しいインジケーター/アラートが表示され、車両への制御移行がスムーズに行われる。",
+  "check_engagement_fail": "起動に失敗する、複数回の試行が必要、エラーが発生する、または制御移行が急激/危険である。",
+
+  "check_steering_left_verify": "ADが起動している状態で、ハンドルを左に十分な力で回してディスエンゲージを発生させます。",
+  "check_steering_left_pass": "ADが正しいアラート/インジケーターとともに即座にディスエンゲージし、セーフティドライバーが完全な手動制御を得る。",
+  "check_steering_left_fail": "ADがディスエンゲージしない、明らかな遅延を伴ってディスエンゲージする、または手動制御が完全に戻らない。",
+
+  "check_steering_right_verify": "ADが起動している状態で、ハンドルを右に十分な力で回してディスエンゲージを発生させます。",
+  "check_steering_right_pass": "ADが正しいアラート/インジケーターとともに即座にディスエンゲージし、セーフティドライバーが完全な手動制御を得る。",
+  "check_steering_right_fail": "ADがディスエンゲージしない、明らかな遅延を伴ってディスエンゲージする、または手動制御が完全に戻らない。",
+
+  "check_accel_verify": "ADが起動している状態で、アクセルペダルを踏んでディスエンゲージを発生させます。",
+  "check_accel_pass": "ADが正しいアラート/インジケーターとともに即座にディスエンゲージし、セーフティドライバーが完全な手動制御を得る。",
+  "check_accel_fail": "ADがディスエンゲージしない、明らかな遅延を伴ってディスエンゲージする、または手動制御が完全に戻らない。",
+
+  "check_brake_verify": "ADが起動している状態で、ブレーキペダルを踏んでディスエンゲージを発生させます。",
+  "check_brake_pass": "ADが正しいアラート/インジケーターとともに即座にディスエンゲージし、セーフティドライバーが完全な手動制御を得る。",
+  "check_brake_fail": "ADがディスエンゲージしない、明らかな遅延を伴ってディスエンゲージする、または手動制御が完全に戻らない。",
+
+  "check_cruise_control_verify": "ADが起動している状態で、クルーズコントロールのスタルク/ボタンを操作してディスエンゲージを発生させます。",
+  "check_cruise_control_pass": "ADが正しいアラート/インジケーターとともに即座にディスエンゲージし、セーフティドライバーが完全な手動制御を得る。",
+  "check_cruise_control_fail": "ADがディスエンゲージしない、明らかな遅延を伴ってディスエンゲージする、または手動制御が完全に戻らない。",
+
+  "check_e_stop_verify": "ADが起動している状態で、E-STOPを作動させてディスエンゲージを発生させます。",
+  "check_e_stop_pass": "正しいアラート/インジケーターとともに、車両が即座にディスエンゲージして安全に停止する。",
+  "check_e_stop_fail": "E-STOPがADをディスエンゲージさせない、停止が遅延する、または車両が安全に停止しない。",
+
+  "check_ad_md_button_verify": "ADが起動している状態で、AD/MDボタンを押してディスエンゲージを発生させます。",
+  "check_ad_md_button_pass": "ADが正しいアラート/インジケーターとともに即座にディスエンゲージし、セーフティドライバーが完全な手動制御を得る。",
+  "check_ad_md_button_fail": "ADがディスエンゲージしない、明らかな遅延を伴ってディスエンゲージする、または手動制御が完全に戻らない。"
 }

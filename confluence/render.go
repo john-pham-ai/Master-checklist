@@ -12,6 +12,15 @@ type CheckResult struct {
 	Label  string // human label, e.g. "run_syscheck results"
 	Result string // "pass" | "fail" | "na"
 	Notes  string
+	Media  []MediaRef // screenshots/clips attached to this check, uploaded separately as page attachments
+}
+
+// MediaRef points at an attachment already uploaded (or about to be uploaded)
+// to the same Confluence page, referenced by filename so the macro resolves
+// once the attachment lands — it does not need to exist when the page is created.
+type MediaRef struct {
+	Filename string
+	Kind     string // "image" | "video"
 }
 
 // DiffItem is one described on-truck commit in the nightly diff summary.
@@ -229,12 +238,33 @@ func resultBadge(result string) string {
 func checksTable(title string, items []CheckResult) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "<h2>%s</h2>\n", esc(title))
-	b.WriteString("<table><thead><tr><th>Check</th><th>Result</th><th>Notes</th></tr></thead><tbody>\n")
+	b.WriteString("<table><thead><tr><th>Check</th><th>Result</th><th>Notes</th><th>Attachments</th></tr></thead><tbody>\n")
 	for _, item := range items {
-		fmt.Fprintf(&b, "<tr><td>%s</td><td>%s</td><td>%s</td></tr>\n",
-			esc(item.Label), resultBadge(item.Result), esc(item.Notes))
+		fmt.Fprintf(&b, "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n",
+			esc(item.Label), resultBadge(item.Result), esc(item.Notes), mediaCell(item.Media))
 	}
 	b.WriteString("</tbody></table>\n")
+	return b.String()
+}
+
+// mediaCell renders the screenshots/clips attached to one check as Confluence
+// storage-format macros. They reference attachments by filename, which
+// Confluence resolves at render time — the attachment upload happens right
+// after this page is created, so the macro is valid before the file exists
+// and simply starts rendering once it does.
+func mediaCell(media []MediaRef) string {
+	if len(media) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, m := range media {
+		name := esc(m.Filename)
+		if m.Kind == "video" {
+			fmt.Fprintf(&b, `<p><ac:link><ri:attachment ri:filename="%s"/><ac:plain-text-link-body><![CDATA[🎥 %s]]></ac:plain-text-link-body></ac:link></p>`, name, name)
+		} else {
+			fmt.Fprintf(&b, `<p><ac:image ac:thumbnail="true" ac:width="240"><ri:attachment ri:filename="%s"/></ac:image></p>`, name)
+		}
+	}
 	return b.String()
 }
 

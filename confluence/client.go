@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"time"
 )
@@ -145,18 +147,69 @@ func (c *Client) FindOrCreateMonthPage(monthTitle string) (string, error) {
 }
 
 // CreateRunPage creates the run's checklist page as a child of parentID.
-// Returns the absolute URL of the created page.
-func (c *Client) CreateRunPage(parentID, title, storageBody string) (string, error) {
+// Returns the new page's ID (needed to attach screenshots/clips afterward)
+// and its absolute URL.
+func (c *Client) CreateRunPage(parentID, title, storageBody string) (pageID, pageURL string, err error) {
 	spaceID, err := c.getSpaceID()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	created, err := c.createPage(spaceID, title, parentID, storageBody)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return c.BaseURL + created.Links.WebUI, nil
+	return created.ID, c.BaseURL + created.Links.WebUI, nil
+}
+
+// UploadAttachment uploads one file as an attachment on an existing page.
+// filename must match whatever ri:attachment reference was baked into the
+// page body (see mediaCell) for the macro to resolve to this file.
+//
+// This uses the v1 content API (rather than v2) because, as of this writing,
+// v2 has no attachment-upload endpoint; v1's /rest/api/content accepts the
+// same numeric page IDs v2 hands back, so mixing them here is safe.
+func (c *Client) UploadAttachment(pageID, filename, contentType string, data io.Reader) error {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	header := textproto.MIMEHeader{}
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, filename))
+	if contentType != "" {
+		header.Set("Content-Type", contentType)
+	}
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(part, data); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", c.BaseURL+"/rest/api/content/"+url.PathEscape(pageID)+"/child/attachment", body)
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(c.BotEmail, c.APIToken)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	// Required by Confluence to allow file uploads without a form-submitted token.
+	req.Header.Set("X-Atlassian-Token", "nocheck")
+
+	// Screen/webcam clips can run tens of MB; the shared httpClient's 15s
+	// timeout (sized for small JSON calls) is too tight for that upload.
+	uploadClient := &http.Client{Timeout: 3 * time.Minute}
+	resp, err := uploadClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("upload attachment %q failed: %s: %s", filename, resp.Status, b)
+	}
+	return nil
 }
 
 func (c *Client) createPage(spaceID, title, parentID, storageBody string) (*pageResult, error) {

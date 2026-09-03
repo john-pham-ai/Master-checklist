@@ -148,5 +148,79 @@
   "feedback_connect_gmail": "Connect Gmail",
   "feedback_connecting": "Finish the Google consent in the popup…",
   "feedback_popup_blocked": "Your browser blocked the popup. Allow popups for this site and try again.",
-  "feedback_error": "Could not send. Please email the owner directly:"
+  "feedback_error": "Could not send. Please email the owner directly:",
+
+  "section_media_setup": "Screenshots & video clips",
+  "media_setup_intro": "Each check below can take pasted screenshots and video clips, which are attached to the Confluence page. Screen/webcam recording needs one-time browser permission — set it up here so it's ready before you start testing.",
+  "media_setup_btn": "🔧 Enable screen & webcam recording",
+  "media_setup_checking": "Requesting camera/microphone permission…",
+  "media_setup_ready": "Ready — screen and webcam recording can be started from any check below.",
+  "media_setup_error": "Camera/microphone permission was not granted: ",
+
+  "check_help_summary": "How to verify · Pass/Fail criteria",
+  "check_help_verify_label": "How to verify:",
+  "check_help_pass_label": "Pass:",
+  "check_help_fail_label": "Fail:",
+
+  "media_btn_screenshot": "📋 Paste / attach screenshot",
+  "media_btn_record_screen": "🖥️ Record screen",
+  "media_btn_record_cam": "🎥 Record webcam",
+  "media_btn_attach_video": "📎 Attach video file",
+  "media_recording_stop": "⏹ Stop recording",
+  "media_recording_status": "Recording… click the button again to stop.",
+  "media_permission_error": "Could not start recording: ",
+  "media_unsupported": "Not supported in this browser",
+  "media_remove": "Remove",
+
+  "check_syscheck_verify": "Run `run_syscheck` on the vehicle and review its output in the terminal or log.",
+  "check_syscheck_pass": "All subsystems report OK/green with no errors or warnings flagged.",
+  "check_syscheck_fail": "Any subsystem reports an error, a timeout, or is missing from the output.",
+
+  "check_timesync_verify": "Run `check_timesync` and review the reported clock offset for every ECU/sensor.",
+  "check_timesync_pass": "All components report a synchronized clock within the tool's tolerance threshold.",
+  "check_timesync_fail": "Any component reports clock drift beyond tolerance, or fails to report at all.",
+
+  "check_build_launch_verify": "Confirm the target build is flashed and the AD stack launches cleanly; check the launch logs and process list.",
+  "check_build_launch_pass": "The running build matches the intended Tag/commit hash and every process starts with no crash or restart loop.",
+  "check_build_launch_fail": "The build does not match the intended Tag/commit hash, or any process crashes or fails to launch.",
+
+  "check_health_monitor_verify": "Open the health monitor dashboard and observe system status at idle and during a short drive.",
+  "check_health_monitor_pass": "Every component shows healthy/green status for the whole check with no persistent warnings or errors.",
+  "check_health_monitor_fail": "Any component shows a persistent warning or error, or drops out during the check.",
+
+  "check_logs_recording_verify": "After a short drive, check /media/hotswap1/frontier/ for log files created during this run.",
+  "check_logs_recording_pass": "New log files appear, are actively growing in size, and their timestamps match the run.",
+  "check_logs_recording_fail": "No new log files appear, files are empty or truncated, or timestamps don't match the run.",
+
+  "check_engagement_verify": "Engage autonomy mode using the standard procedure and observe the takeover.",
+  "check_engagement_pass": "AD engages on the first attempt, the correct indicators/alerts fire, and control transitions cleanly to the vehicle.",
+  "check_engagement_fail": "Engagement fails, needs multiple attempts, throws an error, or the control transition is abrupt or unsafe.",
+
+  "check_steering_left_verify": "With AD engaged, turn the steering wheel left with enough force to trigger a disengagement.",
+  "check_steering_left_pass": "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+  "check_steering_left_fail": "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored.",
+
+  "check_steering_right_verify": "With AD engaged, turn the steering wheel right with enough force to trigger a disengagement.",
+  "check_steering_right_pass": "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+  "check_steering_right_fail": "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored.",
+
+  "check_accel_verify": "With AD engaged, press the accelerator pedal to trigger a disengagement.",
+  "check_accel_pass": "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+  "check_accel_fail": "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored.",
+
+  "check_brake_verify": "With AD engaged, press the brake pedal to trigger a disengagement.",
+  "check_brake_pass": "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+  "check_brake_fail": "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored.",
+
+  "check_cruise_control_verify": "With AD engaged, tap the cruise control stalk/button to trigger a disengagement.",
+  "check_cruise_control_pass": "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+  "check_cruise_control_fail": "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored.",
+
+  "check_e_stop_verify": "With AD engaged, activate the e-stop to trigger a disengagement.",
+  "check_e_stop_pass": "The vehicle disengages and comes to a safe stop immediately, with the correct alert/indicator.",
+  "check_e_stop_fail": "The e-stop does not disengage AD, the stop is delayed, or the vehicle does not come to a safe stop.",
+
+  "check_ad_md_button_verify": "With AD engaged, press the AD/MD button to trigger a disengagement.",
+  "check_ad_md_button_pass": "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+  "check_ad_md_button_fail": "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."
 }

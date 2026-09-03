@@ -19,7 +19,14 @@
   </div>
 </header>
 
-<form id="checklist-form" method="post" action="/submit">
+<form id="checklist-form" method="post" action="/submit" enctype="multipart/form-data">
+  <section class="card" id="media-setup-card">
+    <h2 data-i18n="section_media_setup">Screenshots &amp; video clips</h2>
+    <p class="muted small" data-i18n="media_setup_intro">Each check below can take pasted screenshots and video clips, which are attached to the Confluence page. Screen/webcam recording needs one-time browser permission — set it up here so it's ready before you start testing.</p>
+    <button type="button" id="media-setup-btn" data-i18n="media_setup_btn">🔧 Enable screen &amp; webcam recording</button>
+    <p id="media-setup-status" class="muted small" hidden></p>
+  </section>
+
   <section class="card" id="diff-card">
     <h2 data-i18n="section_diff">What changed since the previous build</h2>
     <div class="grid">
@@ -107,32 +114,12 @@
 
   <section class="card">
     <h2 data-i18n="section_preflight">Preflight Checks</h2>
-    {{range .PreflightChecks}}
-    <div class="check-row">
-      <span class="check-label">{{.Label}}</span>
-      <span class="check-radios">
-        <label><input type="radio" name="result_{{.Key}}" value="pass" required> <span data-i18n="result_pass">Pass</span></label>
-        <label><input type="radio" name="result_{{.Key}}" value="fail"> <span data-i18n="result_fail">Fail</span></label>
-        <label><input type="radio" name="result_{{.Key}}" value="na"> <span data-i18n="result_na">N/A</span></label>
-      </span>
-      <input type="text" name="notes_{{.Key}}" class="notes" data-i18n-placeholder="notes_placeholder" placeholder="Notes">
-    </div>
-    {{end}}
+    {{range .PreflightChecks}}{{template "check_item" .}}{{end}}
   </section>
 
   <section class="card">
     <h2 data-i18n="section_engagement">Engagement Checks</h2>
-    {{range .EngagementChecks}}
-    <div class="check-row">
-      <span class="check-label">{{.Label}}</span>
-      <span class="check-radios">
-        <label><input type="radio" name="result_{{.Key}}" value="pass" required> <span data-i18n="result_pass">Pass</span></label>
-        <label><input type="radio" name="result_{{.Key}}" value="fail"> <span data-i18n="result_fail">Fail</span></label>
-        <label><input type="radio" name="result_{{.Key}}" value="na"> <span data-i18n="result_na">N/A</span></label>
-      </span>
-      <input type="text" name="notes_{{.Key}}" class="notes" data-i18n-placeholder="notes_placeholder" placeholder="Notes">
-    </div>
-    {{end}}
+    {{range .EngagementChecks}}{{template "check_item" .}}{{end}}
   </section>
 
   <section class="card">
@@ -147,17 +134,7 @@
         <input type="text" name="disengagement_closed_loop_run_id">
       </label>
     </div>
-    {{range .DisengagementChecks}}
-    <div class="check-row">
-      <span class="check-label">{{.Label}}</span>
-      <span class="check-radios">
-        <label><input type="radio" name="result_{{.Key}}" value="pass" required> <span data-i18n="result_pass">Pass</span></label>
-        <label><input type="radio" name="result_{{.Key}}" value="fail"> <span data-i18n="result_fail">Fail</span></label>
-        <label><input type="radio" name="result_{{.Key}}" value="na"> <span data-i18n="result_na">N/A</span></label>
-      </span>
-      <input type="text" name="notes_{{.Key}}" class="notes" data-i18n-placeholder="notes_placeholder" placeholder="Notes">
-    </div>
-    {{end}}
+    {{range .DisengagementChecks}}{{template "check_item" .}}{{end}}
   </section>
 
   <button type="submit" class="submit-btn" data-i18n="submit">Submit &amp; Create Confluence Page</button>
@@ -168,5 +145,38 @@
 </footer>
 
 <script src="/static/app.js?v={{.AssetVersion}}"></script>
+<script src="/static/media.js?v={{.AssetVersion}}"></script>
 </body>
 </html>
+
+{{define "check_item"}}
+<div class="check-item">
+  <div class="check-row">
+    <span class="check-label">{{.Label}}</span>
+    <span class="check-radios">
+      <label><input type="radio" name="result_{{.Key}}" value="pass" required> <span data-i18n="result_pass">Pass</span></label>
+      <label><input type="radio" name="result_{{.Key}}" value="fail"> <span data-i18n="result_fail">Fail</span></label>
+      <label><input type="radio" name="result_{{.Key}}" value="na"> <span data-i18n="result_na">N/A</span></label>
+    </span>
+    <input type="text" name="notes_{{.Key}}" class="notes" data-i18n-placeholder="notes_placeholder" placeholder="Notes">
+  </div>
+  <details class="check-help">
+    <summary data-i18n="check_help_summary">How to verify · Pass/Fail criteria</summary>
+    <p><strong data-i18n="check_help_verify_label">How to verify:</strong> <span data-i18n="check_{{.Key}}_verify">{{.Verify}}</span></p>
+    <p><strong data-i18n="check_help_pass_label">Pass:</strong> <span data-i18n="check_{{.Key}}_pass">{{.Pass}}</span></p>
+    <p><strong data-i18n="check_help_fail_label">Fail:</strong> <span data-i18n="check_{{.Key}}_fail">{{.Fail}}</span></p>
+  </details>
+  <div class="check-media" data-check-key="{{.Key}}">
+    <div class="check-media-actions">
+      <button type="button" class="media-btn media-btn-shot" data-i18n="media_btn_screenshot">📋 Paste / attach screenshot</button>
+      <button type="button" class="media-btn media-btn-screen" data-i18n="media_btn_record_screen">🖥️ Record screen</button>
+      <button type="button" class="media-btn media-btn-cam" data-i18n="media_btn_record_cam">🎥 Record webcam</button>
+      <button type="button" class="media-btn media-btn-video" data-i18n="media_btn_attach_video">📎 Attach video file</button>
+    </div>
+    <p class="media-status muted small" hidden></p>
+    <div class="media-list"></div>
+    <input type="file" name="media_screenshot_{{.Key}}" class="media-input-shot" accept="image/*" multiple hidden>
+    <input type="file" name="media_video_{{.Key}}" class="media-input-video" accept="video/*" multiple hidden>
+  </div>
+</div>
+{{end}}
