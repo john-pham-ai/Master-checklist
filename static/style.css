@@ -85,6 +85,9 @@ form { max-width: 860px; margin: 0 auto; padding: 1.5rem; }
 
 .check-item:last-child { border-bottom: none; }
 
+.toggle-label .toggle-control { display: flex; align-items: center; gap: 0.5rem; }
+.toggle-control input[type="checkbox"] { width: 1rem; height: 1rem; accent-color: var(--accent); }
+
 .check-row {
   display: flex;
   align-items: center;

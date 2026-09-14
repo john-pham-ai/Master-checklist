@@ -22,8 +22,13 @@ header.
 - Preflight: `run_syscheck` results, `check_timesync` results, software build & launch,
   health monitor healthy, logs recording in `/media/hotswap1/frontier/`
 - Engagement checks
-- Disengagement checks: Run ID, Closed Loop Run ID, steering left, steering right,
+- Disengagement checks: Run ID, steering left, steering right,
   accel, brake, cruise control, e-stop, AD/MD button
+- **Closed Loop** (optional): a "Closed Loop testing" checkbox in Run Info adds a
+  Closed Loop section to the form — Run ID, Maneuvers, Route used, Recording
+  (Google Drive link). Its contents land in a "Closed Loop" block on the
+  Confluence page only when the checkbox was ticked; passes without it are
+  unchanged.
 
 ## "What changed since the previous build"
 

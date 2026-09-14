@@ -198,6 +198,18 @@ func simpleSentence(key string, n int) string {
 	return changes + "."
 }
 
+// ClosedLoop is the optional closed-loop portion of a run report. It is only
+// filled in (and only rendered) when the tester ticked the Closed Loop toggle
+// on the form.
+type ClosedLoop struct {
+	Enabled   bool
+	RunID     string
+	Maneuvers string // maneuvers tested in the closed loop run
+	Route     string // route used for the closed loop run
+	Recording string // Google Drive link to the closed loop recording
+	Checks    []CheckResult
+}
+
 // RunReport holds everything submitted from the form for one smoke test run.
 type RunReport struct {
 	Tag           string
@@ -216,8 +228,9 @@ type RunReport struct {
 	Engagement    []CheckResult
 	Disengagement []CheckResult
 
-	DisengagementRunID           string
-	DisengagementClosedLoopRunID string
+	DisengagementRunID string
+
+	ClosedLoop ClosedLoop // zero value (Enabled=false) means no closed loop run
 }
 
 func esc(s string) string {
@@ -616,7 +629,6 @@ func RenderStorageFormat(r RunReport) string {
 	b.WriteString("<h2>Disengagement Checks</h2>\n")
 	b.WriteString("<table><tbody>\n")
 	fmt.Fprintf(&b, "<tr><th>Run ID</th><td>%s</td></tr>\n", esc(r.DisengagementRunID))
-	fmt.Fprintf(&b, "<tr><th>Closed Loop Run ID</th><td>%s</td></tr>\n", esc(r.DisengagementClosedLoopRunID))
 	b.WriteString("</tbody></table>\n")
 	b.WriteString("<table><thead><tr><th>Check</th><th>Result</th><th>Notes</th></tr></thead><tbody>\n")
 	for _, item := range r.Disengagement {
@@ -625,7 +637,36 @@ func RenderStorageFormat(r RunReport) string {
 	}
 	b.WriteString("</tbody></table>\n")
 
+	renderClosedLoop(&b, r.ClosedLoop)
+
 	return b.String()
+}
+
+// renderClosedLoop writes the closed loop section, only when the tester
+// enabled it on the form.
+func renderClosedLoop(b *strings.Builder, cl ClosedLoop) {
+	if !cl.Enabled {
+		return
+	}
+	b.WriteString("<h2>Closed Loop</h2>\n")
+	b.WriteString("<table><tbody>\n")
+	fmt.Fprintf(b, "<tr><th>Run ID</th><td>%s</td></tr>\n", esc(cl.RunID))
+	fmt.Fprintf(b, "<tr><th>Maneuvers</th><td>%s</td></tr>\n", esc(cl.Maneuvers))
+	fmt.Fprintf(b, "<tr><th>Route Used</th><td>%s</td></tr>\n", esc(cl.Route))
+	if cl.Recording != "" {
+		fmt.Fprintf(b, "<tr><th>Recording</th><td><a href=\"%s\">%s</a></td></tr>\n", esc(cl.Recording), esc(cl.Recording))
+	} else {
+		b.WriteString("<tr><th>Recording</th><td></td></tr>\n")
+	}
+	b.WriteString("</tbody></table>\n")
+	if len(cl.Checks) > 0 {
+		b.WriteString("<table><thead><tr><th>Check</th><th>Result</th><th>Notes</th><th>Attachments</th></tr></thead><tbody>\n")
+		for _, item := range cl.Checks {
+			fmt.Fprintf(b, "<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n",
+				esc(item.Label), resultBadge(item.Result), esc(item.Notes), mediaCell(item.Media))
+		}
+		b.WriteString("</tbody></table>\n")
+	}
 }
 
 // PageTitle builds the title for the run's Confluence page.

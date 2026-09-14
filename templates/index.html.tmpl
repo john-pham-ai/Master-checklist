@@ -109,6 +109,13 @@
           <option value="partial" data-i18n="result_partial">Partial</option>
         </select>
       </label>
+      <label class="toggle-label">
+        <span data-i18n="field_closed_loop">Closed Loop testing</span>
+        <span class="toggle-control">
+          <input type="checkbox" name="closed_loop" id="closed-loop-toggle" value="on">
+          <span class="muted small" data-i18n="field_closed_loop_hint">adds a Closed Loop section below</span>
+        </span>
+      </label>
     </div>
   </section>
 
@@ -129,12 +136,32 @@
         <span data-i18n="field_disengagement_run_id">Run ID</span>
         <input type="text" name="disengagement_run_id">
       </label>
-      <label>
-        <span data-i18n="field_disengagement_closed_loop_run_id">Closed Loop Run ID</span>
-        <input type="text" name="disengagement_closed_loop_run_id">
-      </label>
     </div>
     {{range .DisengagementChecks}}{{template "check_item" .}}{{end}}
+  </section>
+
+  <section class="card" id="closed-loop-card" hidden>
+    <h2 data-i18n="section_closed_loop">Closed Loop</h2>
+    <div class="grid">
+      <label>
+        <span data-i18n="field_closed_loop_run_id">Run ID</span>
+        <input type="text" name="closed_loop_run_id">
+      </label>
+      <label>
+        <span data-i18n="field_closed_loop_maneuvers">Maneuvers</span>
+        <input type="text" name="closed_loop_maneuvers">
+      </label>
+      <label>
+        <span data-i18n="field_closed_loop_route">Route used</span>
+        <input type="text" name="closed_loop_route">
+      </label>
+      <label>
+        <span data-i18n="field_closed_loop_recording">Recording (Google Drive link)</span>
+        <a href="https://drive.google.com/drive/folders/0AA2bNJa-T_ApUk9PVA" target="_blank" rel="noopener" class="field-hint" data-i18n="drive_folder_hint">Shared Drive folder</a>
+        <input type="url" name="closed_loop_recording" placeholder="https://drive.google.com/...">
+      </label>
+    </div>
+    {{range .ClosedLoopChecks}}{{template "check_item" .}}{{end}}
   </section>
 
   <button type="submit" class="submit-btn" data-i18n="submit">Submit &amp; Create Confluence Page</button>

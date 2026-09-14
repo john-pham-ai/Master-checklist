@@ -149,10 +149,17 @@ var disengagementChecks = []checkSpec{
 		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
 }
 
+// closedLoopChecks are the pass/fail line items of the optional Closed Loop
+// section (shown only when the tester ticks the Closed Loop toggle). Empty for
+// now — add {key, label, verify, pass, fail} rows here as the section gains
+// checks.
+var closedLoopChecks = []checkSpec{}
+
 type formData struct {
 	PreflightChecks     []checkSpec
 	EngagementChecks    []checkSpec
 	DisengagementChecks []checkSpec
+	ClosedLoopChecks    []checkSpec
 	Today               string
 	GithubURL           string
 	CurrentEngineer     string   // signed-in user's name (from IAP), pre-fills Test Engineer
@@ -168,6 +175,7 @@ func makeIndexHandler(vehicles []string) http.HandlerFunc {
 			PreflightChecks:     preflightChecks,
 			EngagementChecks:    engagementChecks,
 			DisengagementChecks: disengagementChecks,
+			ClosedLoopChecks:    closedLoopChecks,
 			Today:               time.Now().Format("2006-01-02"),
 			GithubURL:           githubURL,
 			CurrentEngineer:     currentEngineerName(r),
@@ -296,8 +304,22 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			Engagement:    engagementResults,
 			Disengagement: disengagementResults,
 
-			DisengagementRunID:           r.FormValue("disengagement_run_id"),
-			DisengagementClosedLoopRunID: r.FormValue("disengagement_closed_loop_run_id"),
+			DisengagementRunID: r.FormValue("disengagement_run_id"),
+		}
+
+		// The Closed Loop section only exists on the form when the tester
+		// ticked the toggle, so its fields are only collected then.
+		if r.FormValue("closed_loop") != "" {
+			closedLoopResults, closedLoopUploads := collectChecks(r, closedLoopChecks)
+			pendingMedia = append(pendingMedia, closedLoopUploads...)
+			report.ClosedLoop = confluence.ClosedLoop{
+				Enabled:   true,
+				RunID:     r.FormValue("closed_loop_run_id"),
+				Maneuvers: r.FormValue("closed_loop_maneuvers"),
+				Route:     r.FormValue("closed_loop_route"),
+				Recording: r.FormValue("closed_loop_recording"),
+				Checks:    closedLoopResults,
+			}
 		}
 
 		// The browser posts back the diff summary it rendered (JSON produced by

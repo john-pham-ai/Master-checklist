@@ -571,6 +571,20 @@
   if (diffReload) diffReload.addEventListener("click", () => maybeLoadDiff(true));
   loadTags(); // no type selected on first load -> dropdowns stay disabled until the tester picks one
 
+  // ---- Closed Loop toggle: show the Closed Loop section only when ticked ----
+  // Hidden fields are also disabled so required radios (added with the check
+  // rows) can't block submission, and nothing is posted for a hidden section.
+  const closedLoopToggle = document.getElementById("closed-loop-toggle");
+  const closedLoopCard = document.getElementById("closed-loop-card");
+  if (closedLoopToggle && closedLoopCard) {
+    const applyClosedLoop = () => {
+      closedLoopCard.hidden = !closedLoopToggle.checked;
+      closedLoopCard.querySelectorAll("input, select, textarea").forEach((f) => { f.disabled = !closedLoopToggle.checked; });
+    };
+    closedLoopToggle.addEventListener("change", applyClosedLoop);
+    applyClosedLoop();
+  }
+
   // ---- Test Engineer suggestions: members of the access groups (see engineers.go). ----
   // The field itself is pre-filled server-side with the signed-in user's name.
   const engineerList = document.getElementById("engineer-suggestions");
