@@ -194,6 +194,11 @@ func fetchTruckRunID(ctx context.Context, cfg config, requested string) (truckRu
 // makeTruckRunIDHandler serves GET /api/truck/run_id?vehicle=<number>. The
 // vehicle parameter is optional: the connected truck is identified by its
 // hostname, and the response reports which one it was.
+//
+// TRUCK_SSH_ENABLED=true always means the REAL SSH fetch, even alongside
+// CONFLUENCE_DRY_RUN (so the Confluence side can stay in dry run while the
+// truck fetch is live). Without it, a dry run serves a deterministic fake so
+// the UI flow can be exercised without a truck.
 func makeTruckRunIDHandler(cfg config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !cfg.TruckSSHEnabled && !cfg.DryRun {
@@ -206,8 +211,9 @@ func makeTruckRunIDHandler(cfg config) http.HandlerFunc {
 			return
 		}
 
-		if cfg.DryRun {
-			// Deterministic fake so the UI flow can be tested without a truck.
+		if !cfg.TruckSSHEnabled {
+			// Dry run without SSH enabled: deterministic fake run so the UI
+			// flow can be tested without a truck.
 			vehicle := requested
 			if vehicle == "" {
 				vehicle = "805"

@@ -223,6 +223,27 @@ func TestTruckRunIDHandlerErrors(t *testing.T) {
 	}
 }
 
+// TRUCK_SSH_ENABLED alongside CONFLUENCE_DRY_RUN must do the real SSH fetch,
+// not serve the fake — that's the documented way to try it against a truck.
+func TestTruckRunIDHandlerSSHEnabledOverridesDryRun(t *testing.T) {
+	const root = "/media/hotswap1/frontier/truck-812/2026/09/15/2026-09-15_10-00-00_truck-812"
+	out := "printf 'HOSTNAME\\ttruck-812-primarypc\\nTODAY\\t" + root + "\\nLATEST\\t" + root + "\\n'\n"
+	cfg := truckTestConfig(fakeSSH(t, out, 0))
+	cfg.DryRun = true
+	rec := httptest.NewRecorder()
+	makeTruckRunIDHandler(cfg)(rec, httptest.NewRequest("GET", "/api/truck/run_id", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %q", rec.Code, rec.Body.String())
+	}
+	var info truckRunInfo
+	if err := json.Unmarshal(rec.Body.Bytes(), &info); err != nil {
+		t.Fatal(err)
+	}
+	if info.RunID != "2026-09-15_10-00-00_truck-812" || info.Host != "truck-812-primarypc" {
+		t.Errorf("fake served instead of the ssh result: %+v", info)
+	}
+}
+
 func TestTruckRunIDHandlerDryRunReturnsFake(t *testing.T) {
 	cfg := truckTestConfig("ssh")
 	cfg.TruckSSHEnabled = false

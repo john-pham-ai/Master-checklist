@@ -55,8 +55,11 @@ field from the truck's hostname if empty.
 ```
 
 - **Local only.** Cloud Run has no route to the trucks, so the buttons are not rendered
-  in the deployed app. Locally run with `TRUCK_SSH_ENABLED=true go run .` (dry run also
-  renders them and serves a fake run so the UI flow can be exercised without a truck).
+  in the deployed app. Locally run with `TRUCK_SSH_ENABLED=true go run .` — the fetch is
+  then always the real SSH, even alongside `CONFLUENCE_DRY_RUN` (so the Confluence side
+  can stay in dry run while the truck fetch is live). A dry run *without*
+  `TRUCK_SSH_ENABLED` renders the buttons with a fake run instead, so the UI flow can be
+  exercised without a truck.
 - **Your own SSH credentials.** The app shells out to the system `ssh`
   (`-o BatchMode=yes -o StrictHostKeyChecking=accept-new`), so your `~/.ssh` keys, agent
   and config are used as-is — no keys are stored in the app.
