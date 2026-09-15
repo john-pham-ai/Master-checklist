@@ -702,10 +702,20 @@
         if (!/^\d+$/.test(vehicle)) { setRemoteHint(""); return; }
         lookupTimer = setTimeout(() => {
           fetch("/api/truck/ssh_lookup?vehicle=" + encodeURIComponent(vehicle))
-            .then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) }))
-            .then(({ ok, data }) => {
+            .then(async (r) => ({ ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) }))
+            .then(({ ok, status, data }) => {
               if (vehicleInput.value.trim() !== vehicle) return; // user moved on
-              if (!ok) { setRemoteHint(""); return; } // hosted/local-off note: leave the field alone
+              if (!ok) {
+                if (status === 503) {
+                  // Hosted app: the lookup needs the tailscale CLI on the
+                  // laptop, which the server doesn't have — say so instead
+                  // of silently doing nothing.
+                  setRemoteHint("ℹ️ " + t("truck_lookup_local_only", "the Tailscale lookup only runs on the local app — leave blank or type the IP"));
+                } else {
+                  setRemoteHint("");
+                }
+                return;
+              }
               if (data.ip) {
                 if (!remoteIP.value.trim() || remoteIP.dataset.autofilled === "1") {
                   remoteIP.value = data.ip;

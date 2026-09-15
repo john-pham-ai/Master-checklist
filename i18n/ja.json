@@ -35,6 +35,7 @@
   "truck_lookup_online": "Tailscaleから検索しました",
   "truck_lookup_offline": "Tailscaleで検出 — 現在オフライン（エイリアスは追加されます）",
   "truck_lookup_not_found": "Tailscale上に見つかりません — 空欄のままにするかIPを入力してください",
+  "truck_lookup_local_only": "Tailscaleによる検索はローカルアプリでのみ動作します — 空欄のままにするかIPを入力してください",
   "truck_setup_need_vehicle": "先にトラック番号を入力してください — SSH鍵とエイリアスはトラック番号の名前になります。",
   "field_overall_result": "総合結果",
   "result_pass": "合格",

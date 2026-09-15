@@ -35,6 +35,7 @@
   "truck_lookup_online": "found via Tailscale",
   "truck_lookup_offline": "found via Tailscale, currently offline — the alias will still be added",
   "truck_lookup_not_found": "not on your Tailscale — leave blank or type the IP",
+  "truck_lookup_local_only": "the Tailscale lookup only runs on the local app — leave blank or type the IP",
   "truck_setup_need_vehicle": "Enter the truck number first — the SSH identity and alias are named after it.",
   "field_overall_result": "Overall Result",
   "result_pass": "Pass",
