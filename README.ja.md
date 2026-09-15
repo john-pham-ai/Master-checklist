@@ -28,16 +28,18 @@ Confluenceページが作成されます。
   録画(Google Driveリンク)。内容はチェックボックスがオンだった場合のみConfluenceページの
   「クローズドループ」ブロックに出力され、オフの実行には何も追加されません。
 
-## トラックから実行IDを取得（ローカルのみ）
+## トラックから実行IDを取得
 
 各実行ID欄（実行情報・ディスエンゲージメント・クローズドループ）には
-**🚚 トラックから取得** ボタンを付けられます。クリックすると、接続中のトラックにSSHし、
+**🚚 トラックから取得** ボタンが表示されます。クリックすると、接続中のトラックにSSHし、
 当日の最新の実行ログディレクトリを探して欄に入力します。実行情報のボタンは、
 「ログ記録」チェックのメモ欄にも完全なログパスを書き込み、車両欄が空なら
 ホスト名から車両番号を補完します。
 
-- **ローカル専用** — デプロイされたアプリ(Cloud Run)にはトラックへの経路がないため、
-  ボタンは表示されません。ローカルでは `TRUCK_SSH_ENABLED=true go run .`。
+- **ローカル実行時にのみ機能** — ボタンはどこでも表示されますが、デプロイされた
+  アプリ(Cloud Run)にはトラックへの経路がないため、クリックすると
+  「ローカルで実行中のみ動作する」旨のメッセージを即座に返します（SSHタイムアウトで
+  待たされることはありません）。ローカルでは `TRUCK_SSH_ENABLED=true go run .`。
   有効化していれば `CONFLUENCE_DRY_RUN` と併用してもSSH取得は本物になります
   （Confluence側だけドライランにできます）。`TRUCK_SSH_ENABLED` なしのドライランでは
   ダミーの実行IDを返し、トラックなしでUIの流れを試せます。
@@ -62,8 +64,8 @@ go run .
 CONFLUENCE_DRY_RUN=true go run .
 ```
 
-その後、http://localhost:8080 を開いてください。ドライランでも「トラックから取得」
-ボタンが表示されます（ダミーの実行IDを返します）。実際のトラックに対して試すには、
+その後、http://localhost:8080 を開いてください。ドライランでは「トラックから取得」
+ボタンがダミーの実行IDを返します。実際のトラックに対して試すには、
 トラックのネットワークに接続した上で:
 
 ```sh
@@ -83,7 +85,7 @@ CONFLUENCE_DRY_RUN=true TRUCK_SSH_ENABLED=true go run .
 | `GITHUB_TAG_REPO_NAME` | `brain2` | タグ自動補完元のリポジトリ名 |
 | `ADDR` | `:8080` | HTTPのリスンアドレス |
 | `CONFLUENCE_DRY_RUN` | `false` | Secret Manager と Confluence/GitHub 呼び出しをスキップし、ログ出力のみ行う |
-| `TRUCK_SSH_ENABLED` | `false` | 「トラックから取得」ボタンと `/api/truck/run_id` を有効化（ローカルのみ） |
+| `TRUCK_SSH_ENABLED` | `false` | `/api/truck/run_id` を実際のSSH取得にする（ボタンは常に表示。未設定のホスト環境ではローカル専用の説明を返す） |
 | `TRUCK_SSH_TARGET` | `applied@192.168.1.11` | 接続中トラックへのSSH接続先 |
 | `TRUCK_LOG_ROOT` | `/media/hotswap1/frontier` | トラック上のログルート |
 | `TRUCK_SSH_BIN` | `ssh` | 呼び出すSSHバイナリ（テスト用のfake sshに差し替えるためのもの） |

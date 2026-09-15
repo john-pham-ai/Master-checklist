@@ -213,13 +213,22 @@ func TestTruckRunIDHandlerErrors(t *testing.T) {
 		t.Errorf("error text not helpful: %q", body["error"])
 	}
 
-	// Disabled: 404 (as on Cloud Run, where the feature is off).
+	// Not enabled and not dry run (the hosted/Cloud Run case): the buttons
+	// still render, so the fetch answers instantly with a local-only
+	// explanation instead of hanging on an SSH timeout.
 	cfg = truckTestConfig("ssh")
 	cfg.TruckSSHEnabled = false
 	rec = httptest.NewRecorder()
 	makeTruckRunIDHandler(cfg)(rec, httptest.NewRequest("GET", "/api/truck/run_id?vehicle=805", nil))
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("disabled status = %d, want 404", rec.Code)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("hosted status = %d, want 503", rec.Code)
+	}
+	var hostedBody map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &hostedBody); err != nil {
+		t.Fatalf("bad JSON: %v (%q)", err, rec.Body.String())
+	}
+	if !strings.Contains(hostedBody["error"], "runs locally") || !strings.Contains(hostedBody["error"], "no route to the trucks") {
+		t.Errorf("error text not the local-only explanation: %q", hostedBody["error"])
 	}
 }
 

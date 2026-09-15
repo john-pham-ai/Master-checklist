@@ -198,11 +198,16 @@ func fetchTruckRunID(ctx context.Context, cfg config, requested string) (truckRu
 // TRUCK_SSH_ENABLED=true always means the REAL SSH fetch, even alongside
 // CONFLUENCE_DRY_RUN (so the Confluence side can stay in dry run while the
 // truck fetch is live). Without it, a dry run serves a deterministic fake so
-// the UI flow can be exercised without a truck.
+// the UI flow can be exercised without a truck. In the hosted (Cloud Run)
+// environment neither is set, so the buttons render but the fetch answers
+// instantly with a local-only explanation rather than hanging on an SSH
+// timeout — Cloud Run has no route to the trucks.
 func makeTruckRunIDHandler(cfg config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !cfg.TruckSSHEnabled && !cfg.DryRun {
-			http.Error(w, "truck SSH is not enabled", http.StatusNotFound)
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+				"error": "This only works when the app runs locally (TRUCK_SSH_ENABLED=true) on a laptop cabled to the truck — the hosted app has no route to the trucks.",
+			})
 			return
 		}
 		requested := strings.TrimSpace(r.URL.Query().Get("vehicle"))

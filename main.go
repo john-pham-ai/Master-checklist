@@ -164,13 +164,12 @@ type formData struct {
 	GithubURL           string
 	CurrentEngineer     string   // signed-in user's name (from IAP), pre-fills Test Engineer
 	Vehicles            []string // Vehicle field autofill options, e.g. 801..835
-	TruckSSH            bool     // render "Fetch from truck" buttons (local-only feature, truck.go)
 	AssetVersion        string   // cache-busting token for /static and /i18n URLs
 }
 
 const githubURL = "https://github.com/john-pham-ai/Master-checklist"
 
-func makeIndexHandler(cfg config, vehicles []string) http.HandlerFunc {
+func makeIndexHandler(vehicles []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data := formData{
 			PreflightChecks:     preflightChecks,
@@ -181,10 +180,7 @@ func makeIndexHandler(cfg config, vehicles []string) http.HandlerFunc {
 			GithubURL:           githubURL,
 			CurrentEngineer:     currentEngineerName(r),
 			Vehicles:            vehicles,
-			// Dry-run also enables the buttons so the whole fetch flow can be
-			// exercised locally without a truck; deployed prod never sets DryRun.
-			TruckSSH:     cfg.TruckSSHEnabled || cfg.DryRun,
-			AssetVersion: assetVersion,
+			AssetVersion:        assetVersion,
 		}
 		setTridentCookie(w)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -596,7 +592,7 @@ func main() {
 	tr := newTranslator(cfg.ProjectID, cfg.DryRun)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", makeIndexHandler(cfg, parseVehicleRange(cfg.VehicleRange)))
+	mux.HandleFunc("/", makeIndexHandler(parseVehicleRange(cfg.VehicleRange)))
 	mux.HandleFunc("/submit", makeSubmitHandler(cfg))
 	mux.HandleFunc("/api/tags", makeTagsHandler(tags))
 	mux.HandleFunc("/api/diff", newDiffService(cfg, tags, tr).handle)

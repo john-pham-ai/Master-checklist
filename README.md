@@ -41,9 +41,9 @@ including the automatic pre-selection of the latest build on page load. The fiel
 editable; a manual edit is simply overwritten on the next tag change, since the tag
 fully determines the commit.
 
-## Fetch Run ID from the truck (local only)
+## Fetch Run ID from the truck
 
-Each Run ID field (Run Info, Disengagement, Closed Loop) can get a **🚚 Fetch from
+Each Run ID field (Run Info, Disengagement, Closed Loop) gets a **🚚 Fetch from
 truck** button. Clicking it SSHes to the truck the laptop is cabled to, finds the newest
 run log directory for today and fills the field with it — the Run Info button also
 writes the full log path into the *Logs recording* check's notes, and fills the Vehicle
@@ -54,11 +54,13 @@ field from the truck's hostname if empty.
                        └ vehicle ┘└ year/month/day ┘ └──── run_id ────┘
 ```
 
-- **Local only.** Cloud Run has no route to the trucks, so the buttons are not rendered
-  in the deployed app. Locally run with `TRUCK_SSH_ENABLED=true go run .` — the fetch is
+- **Works only when run locally.** The buttons render everywhere, but the hosted
+  (Cloud Run) app has no route to the trucks — clicking there answers instantly with a
+  note that the fetch only works from a locally-run instance, instead of hanging on an
+  SSH timeout. Locally run with `TRUCK_SSH_ENABLED=true go run .` — the fetch is
   then always the real SSH, even alongside `CONFLUENCE_DRY_RUN` (so the Confluence side
   can stay in dry run while the truck fetch is live). A dry run *without*
-  `TRUCK_SSH_ENABLED` renders the buttons with a fake run instead, so the UI flow can be
+  `TRUCK_SSH_ENABLED` serves a fake run instead, so the UI flow can be
   exercised without a truck.
 - **Your own SSH credentials.** The app shells out to the system `ssh`
   (`-o BatchMode=yes -o StrictHostKeyChecking=accept-new`), so your `~/.ssh` keys, agent
@@ -215,8 +217,8 @@ CONFLUENCE_DRY_RUN=true go run .
 
 Then open http://localhost:8080.
 
-Dry run also renders the "Fetch from truck" buttons (with a fake run, see
-[Fetch Run ID from the truck](#fetch-run-id-from-the-truck-local-only)). For the real
+Dry run also serves a fake run for the "Fetch from truck" buttons (see
+[Fetch Run ID from the truck](#fetch-run-id-from-the-truck)). For the real
 thing, connect to the truck's network and run:
 
 ```sh
@@ -249,7 +251,7 @@ CONFLUENCE_TOKEN="<atlassian-api-token>" GITHUB_TOKEN="<github-pat>" go run .
 | `TRANSLATE_MODEL` | `gemini-2.5-flash` | Vertex AI model used to translate Japanese feedback to English |
 | `VERTEX_LOCATION` | `us-central1` | Vertex AI region |
 | `TRANSLATE_DISABLED` | `false` | Skip translation entirely |
-| `TRUCK_SSH_ENABLED` | `false` | Enable the "Fetch from truck" buttons + `/api/truck/run_id` (local only) |
+| `TRUCK_SSH_ENABLED` | `false` | Make `/api/truck/run_id` do the real SSH (buttons render regardless; without this the hosted fetch explains it only works locally) |
 | `TRUCK_SSH_TARGET` | `applied@192.168.1.11` | SSH destination for the connected truck |
 | `TRUCK_LOG_ROOT` | `/media/hotswap1/frontier` | Root of the on-truck log tree |
 | `TRUCK_SSH_BIN` | `ssh` | SSH binary to invoke (test hook for a fake `ssh`) |

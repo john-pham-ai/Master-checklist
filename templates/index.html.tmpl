@@ -104,9 +104,9 @@
       </label>
       <label for="run-id-input">
         <span data-i18n="field_run_id">Run ID</span>
-        {{if .TruckSSH}}<button type="button" class="btn-link truck-fetch-btn" data-field="run_id" data-notes="logs_recording" data-i18n="truck_fetch">🚚 Fetch from truck</button>{{end}}
+        <button type="button" class="btn-link truck-fetch-btn" data-field="run_id" data-notes="logs_recording" data-i18n="truck_fetch">🚚 Fetch from truck</button>
         <input type="text" name="run_id" id="run-id-input" required>
-        {{if .TruckSSH}}<span class="truck-status muted small" hidden></span>{{end}}
+        <span class="truck-status muted small" hidden></span>
       </label>
       <label>
         <span data-i18n="field_overall_result">Overall Result</span>
@@ -141,9 +141,9 @@
     <div class="grid">
       <label for="disengagement-run-id-input">
         <span data-i18n="field_disengagement_run_id">Run ID</span>
-        {{if .TruckSSH}}<button type="button" class="btn-link truck-fetch-btn" data-field="disengagement_run_id" data-i18n="truck_fetch">🚚 Fetch from truck</button>{{end}}
+        <button type="button" class="btn-link truck-fetch-btn" data-field="disengagement_run_id" data-i18n="truck_fetch">🚚 Fetch from truck</button>
         <input type="text" name="disengagement_run_id" id="disengagement-run-id-input">
-        {{if .TruckSSH}}<span class="truck-status muted small" hidden></span>{{end}}
+        <span class="truck-status muted small" hidden></span>
       </label>
     </div>
     {{range .DisengagementChecks}}{{template "check_item" .}}{{end}}
@@ -154,9 +154,9 @@
     <div class="grid">
       <label for="closed-loop-run-id-input">
         <span data-i18n="field_closed_loop_run_id">Run ID</span>
-        {{if .TruckSSH}}<button type="button" class="btn-link truck-fetch-btn" data-field="closed_loop_run_id" data-i18n="truck_fetch">🚚 Fetch from truck</button>{{end}}
+        <button type="button" class="btn-link truck-fetch-btn" data-field="closed_loop_run_id" data-i18n="truck_fetch">🚚 Fetch from truck</button>
         <input type="text" name="closed_loop_run_id" id="closed-loop-run-id-input">
-        {{if .TruckSSH}}<span class="truck-status muted small" hidden></span>{{end}}
+        <span class="truck-status muted small" hidden></span>
       </label>
       <label>
         <span data-i18n="field_closed_loop_maneuvers">Maneuvers</span>
