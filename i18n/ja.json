@@ -157,13 +157,6 @@
   "feedback_popup_blocked": "ブラウザがポップアップをブロックしました。このサイトのポップアップを許可して再試行してください。",
   "feedback_error": "送信できませんでした。管理者へ直接メールしてください：",
 
-  "section_media_setup": "スクリーンショット・動画クリップ",
-  "media_setup_intro": "以下の各チェックには、スクリーンショットの貼り付けや動画クリップを追加できます。追加したファイルはConfluenceページに添付されます。画面録画・ウェブカメラ録画には初回のみブラウザの許可が必要です。テストを始める前にここで設定しておいてください。",
-  "media_setup_btn": "🔧 画面・ウェブカメラ録画を有効にする",
-  "media_setup_checking": "カメラ・マイクの許可を要求しています…",
-  "media_setup_ready": "準備完了 — 以下の各チェックから画面録画・ウェブカメラ録画を開始できます。",
-  "media_setup_error": "カメラ・マイクの許可が得られませんでした：",
-
   "check_help_summary": "確認方法・合格/不合格の基準",
   "check_help_verify_label": "確認方法：",
   "check_help_pass_label": "合格：",
@@ -171,7 +164,6 @@
 
   "media_btn_screenshot": "📋 スクリーンショットを貼り付け/添付",
   "media_btn_record_screen": "🖥️ 画面を録画",
-  "media_btn_record_cam": "🎥 ウェブカメラを録画",
   "media_btn_attach_video": "📎 動画ファイルを添付",
   "media_recording_stop": "⏹ 録画を停止",
   "media_recording_status": "録画中…もう一度ボタンを押すと停止します。",

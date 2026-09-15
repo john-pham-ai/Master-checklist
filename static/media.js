@@ -150,7 +150,6 @@
     const videoBtn = container.querySelector(".media-btn-video");
     const videoInput = container.querySelector(".media-input-video");
     const screenBtn = container.querySelector(".media-btn-screen");
-    const camBtn = container.querySelector(".media-btn-cam");
 
     container.addEventListener("click", () => markActive(container));
     container.addEventListener("focusin", () => markActive(container));
@@ -171,7 +170,6 @@
     }
 
     wireRecorder(container, key, screenBtn, "screen", () => navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }));
-    wireRecorder(container, key, camBtn, "cam", () => navigator.mediaDevices.getUserMedia({ video: true, audio: true }));
   }
 
   const mediaSupported = !!(navigator.mediaDevices && window.MediaRecorder);
@@ -179,7 +177,7 @@
   document.querySelectorAll(".check-media").forEach((container) => {
     initCheck(container);
     if (!mediaSupported) {
-      container.querySelectorAll(".media-btn-screen, .media-btn-cam").forEach((b) => {
+      container.querySelectorAll(".media-btn-screen").forEach((b) => {
         b.disabled = true;
         b.title = t("media_unsupported", "Not supported in this browser");
       });
@@ -221,33 +219,6 @@
       addFiles(container, key, "image", files);
     }
   });
-
-  // One-time permission "warm-up" so recording during an actual check doesn't
-  // stall on a browser prompt. getDisplayMedia always needs its own picker
-  // (browsers won't let that be pre-armed), so this only primes the camera/mic.
-  const setupBtn = document.getElementById("media-setup-btn");
-  const setupStatus = document.getElementById("media-setup-status");
-  if (setupBtn && setupStatus) {
-    setupBtn.addEventListener("click", async () => {
-      if (!mediaSupported) {
-        setupStatus.hidden = false;
-        setupStatus.classList.add("error");
-        setupStatus.textContent = t("media_unsupported", "Not supported in this browser");
-        return;
-      }
-      setupStatus.hidden = false;
-      setupStatus.classList.remove("error");
-      setupStatus.textContent = t("media_setup_checking", "Requesting camera/microphone permission…");
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-        setupStatus.textContent = t("media_setup_ready", "Ready — screen and webcam recording can be started from any check below.");
-      } catch (err) {
-        setupStatus.classList.add("error");
-        setupStatus.textContent = t("media_setup_error", "Camera/microphone permission was not granted: ") + (err && err.message ? err.message : err);
-      }
-    });
-  }
 
   // Belt-and-suspenders: hidden inputs are already re-synced on every
   // add/remove, but do it once more right before submit in case some future

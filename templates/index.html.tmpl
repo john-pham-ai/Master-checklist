@@ -20,13 +20,6 @@
 </header>
 
 <form id="checklist-form" method="post" action="/submit" enctype="multipart/form-data">
-  <section class="card" id="media-setup-card">
-    <h2 data-i18n="section_media_setup">Screenshots &amp; video clips</h2>
-    <p class="muted small" data-i18n="media_setup_intro">Each check below can take pasted screenshots and video clips, which are attached to the Confluence page. Screen/webcam recording needs one-time browser permission — set it up here so it's ready before you start testing.</p>
-    <button type="button" id="media-setup-btn" data-i18n="media_setup_btn">🔧 Enable screen &amp; webcam recording</button>
-    <p id="media-setup-status" class="muted small" hidden></p>
-  </section>
-
   <section class="card" id="diff-card">
     <h2 data-i18n="section_diff">What changed since the previous build</h2>
     <div class="grid">
@@ -208,7 +201,6 @@
     <div class="check-media-actions">
       <button type="button" class="media-btn media-btn-shot" data-i18n="media_btn_screenshot">📋 Paste / attach screenshot</button>
       <button type="button" class="media-btn media-btn-screen" data-i18n="media_btn_record_screen">🖥️ Record screen</button>
-      <button type="button" class="media-btn media-btn-cam" data-i18n="media_btn_record_cam">🎥 Record webcam</button>
       <button type="button" class="media-btn media-btn-video" data-i18n="media_btn_attach_video">📎 Attach video file</button>
     </div>
     <p class="media-status muted small" hidden></p>

@@ -221,8 +221,6 @@ footer a { color: var(--accent); text-decoration: none; }
 .check-help strong { color: var(--text); }
 
 /* ---- Per-check screenshot/video capture ---- */
-#media-setup-btn { margin-top: 0.4rem; }
-
 .check-media { margin-top: 0.5rem; }
 .check-media > span.muted { display: block; margin-bottom: 0.35rem; }
 .check-media-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }

@@ -197,7 +197,7 @@ func (c *Client) UploadAttachment(pageID, filename, contentType string, data io.
 	// Required by Confluence to allow file uploads without a form-submitted token.
 	req.Header.Set("X-Atlassian-Token", "nocheck")
 
-	// Screen/webcam clips can run tens of MB; the shared httpClient's 15s
+	// Screen clips can run tens of MB; the shared httpClient's 15s
 	// timeout (sized for small JSON calls) is too tight for that upload.
 	uploadClient := &http.Client{Timeout: 3 * time.Minute}
 	resp, err := uploadClient.Do(req)

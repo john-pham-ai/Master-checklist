@@ -157,13 +157,6 @@
   "feedback_popup_blocked": "Your browser blocked the popup. Allow popups for this site and try again.",
   "feedback_error": "Could not send. Please email the owner directly:",
 
-  "section_media_setup": "Screenshots & video clips",
-  "media_setup_intro": "Each check below can take pasted screenshots and video clips, which are attached to the Confluence page. Screen/webcam recording needs one-time browser permission — set it up here so it's ready before you start testing.",
-  "media_setup_btn": "🔧 Enable screen & webcam recording",
-  "media_setup_checking": "Requesting camera/microphone permission…",
-  "media_setup_ready": "Ready — screen and webcam recording can be started from any check below.",
-  "media_setup_error": "Camera/microphone permission was not granted: ",
-
   "check_help_summary": "How to verify · Pass/Fail criteria",
   "check_help_verify_label": "How to verify:",
   "check_help_pass_label": "Pass:",
@@ -171,7 +164,6 @@
 
   "media_btn_screenshot": "📋 Paste / attach screenshot",
   "media_btn_record_screen": "🖥️ Record screen",
-  "media_btn_record_cam": "🎥 Record webcam",
   "media_btn_attach_video": "📎 Attach video file",
   "media_recording_stop": "⏹ Stop recording",
   "media_recording_status": "Recording… click the button again to stop.",
