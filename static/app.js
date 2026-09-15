@@ -619,7 +619,8 @@
 
   function renderTruckSetupStatus(container, ok, res, requestedVehicle) {
     container.innerHTML = "";
-    const p = el("p", ok ? "" : "error");
+    // Errors need muted+small+error to pick up the red rule in style.css.
+    const p = el("p", ok ? "muted small" : "muted small error");
     const lines = [];
     if (!ok) {
       lines.push("⚠️ " + (res.error || "Setup failed."));

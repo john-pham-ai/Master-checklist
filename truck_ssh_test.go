@@ -333,3 +333,41 @@ func TestFetchFailureHintsAtSetup(t *testing.T) {
 		t.Errorf("hint should be gone once the alias exists: %v", err)
 	}
 }
+
+// The install-failure diagnosis must not claim a key was rejected when the
+// truck is simply unreachable (the usual no-cable case).
+func TestClassifyInstallDetail(t *testing.T) {
+	cases := []struct{ detail, want string }{
+		{"ssh: connect to host 192.168.1.11 port 22: Connection timed out", "could not reach the truck"},
+		{"ssh: connect to host 192.168.1.11 port 22: Connection refused", "could not reach the truck"},
+		{"Permission denied (publickey,password)", "your existing key was not accepted"},
+	}
+	for _, c := range cases {
+		if got := classifyInstallDetail(c.detail); !strings.Contains(got, c.want) {
+			t.Errorf("classifyInstallDetail(%q) = %q, want it to mention %q", c.detail, got, c.want)
+		}
+	}
+}
+
+func TestSetupTruckSSHUnreachableIsNotAKeyRejection(t *testing.T) {
+	cfg, _ := sshTestEnv(t)
+	t.Setenv("FAKE_SSH_EXIT", "255")
+	t.Setenv("FAKE_SSH_STDERR", "")
+	// The fake ssh prints 'ssh: connect to host 192.168.1.11 port 22: Connection timed out'.
+	fake := strings.Replace(fakeSSHScript, `cat >/dev/null`,
+		`cat >/dev/null; echo 'ssh: connect to host 192.168.1.11 port 22: Connection timed out' >&2`, 1)
+	cfg.TruckSSHBin = fakeBin(t, t.TempDir(), "ssh", fake)
+	res, err := setupTruckSSH(context.Background(), cfg, "805", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.KeyInstalled {
+		t.Fatal("install reported success")
+	}
+	if !strings.Contains(res.InstallDetail, "could not reach the truck") {
+		t.Errorf("unreachable truck misdiagnosed: %q", res.InstallDetail)
+	}
+	if strings.Contains(res.InstallDetail, "key was not accepted") {
+		t.Errorf("should not claim the key was rejected: %q", res.InstallDetail)
+	}
+}

@@ -188,6 +188,21 @@ func setupTruckSSH(ctx context.Context, cfg config, vehicle, password string) (t
 	return res, nil
 }
 
+// classifyInstallDetail diagnoses from ssh's stderr: an unreachable truck
+// (the usual case when the laptop isn't cabled) must not be reported as
+// "your key was not accepted".
+func classifyInstallDetail(detail string) string {
+	d := strings.ToLower(detail)
+	switch {
+	case strings.Contains(d, "timed out") || strings.Contains(d, "timeout"):
+		return "could not reach the truck (connection timed out) — check the cable/network"
+	case strings.Contains(d, "refused") || strings.Contains(d, "unreachable") || strings.Contains(d, "no route"):
+		return "could not reach the truck (" + detail + ")"
+	default:
+		return "your existing key was not accepted (" + detail + ")"
+	}
+}
+
 // authorizedKeysScript appends the key read from stdin to the truck's
 // authorized_keys unless it is already there. Fixed script; the key comes in
 // on stdin, never in the command line.
@@ -237,7 +252,11 @@ func installTruckKey(ctx context.Context, cfg config, vehicle, publicKey, passwo
 		if ctx.Err() == context.DeadlineExceeded {
 			return false, "timed out reaching the truck"
 		}
-		return false, "your existing key was not accepted and no password was given (" + detail + ")"
+		diagnosed := classifyInstallDetail(detail)
+		if strings.Contains(diagnosed, "key was not accepted") {
+			diagnosed += " — give the truck's login password to install the key"
+		}
+		return false, diagnosed
 	}
 
 	// Attempt 2: the one-time password, handed to ssh through SSH_ASKPASS.
@@ -261,7 +280,9 @@ func installTruckKey(ctx context.Context, cfg config, vehicle, publicKey, passwo
 	if ctx.Err() == context.DeadlineExceeded {
 		return false, "timed out reaching the truck"
 	}
-	return false, "the password was not accepted (" + detail + ")"
+	diagnosed := strings.Replace(classifyInstallDetail(detail),
+		"your existing key was not accepted", "the password was not accepted", 1)
+	return false, diagnosed
 }
 
 // writeAskpassHelper writes a tiny executable that prints the password from
