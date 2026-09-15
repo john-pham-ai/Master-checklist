@@ -157,17 +157,20 @@ func parseTruckOutput(out, requested string) (truckRunInfo, error) {
 	return info, nil
 }
 
-// fetchTruckRunID SSHes to the configured target, runs the fixed script and
-// parses its output.
+// fetchTruckRunID SSHes to the truck, runs the fixed script and parses its
+// output. When a per-truck SSH alias exists for the requested vehicle (see
+// setupTruckSSH), it is used instead of the raw TRUCK_SSH_TARGET so that
+// truck's own identity and known-hosts file apply.
 func fetchTruckRunID(ctx context.Context, cfg config, requested string) (truckRunInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, truckSSHTimeout)
 	defer cancel()
 
+	target := resolveTruckTarget(cfg, requested)
 	cmd := exec.CommandContext(ctx, cfg.TruckSSHBin,
 		"-o", "BatchMode=yes", // never prompt for a password — fail fast instead
 		"-o", "ConnectTimeout=5",
 		"-o", "StrictHostKeyChecking=accept-new", // first cable-up to a new truck shouldn't hang on a yes/no prompt
-		cfg.TruckSSHTarget, "bash -s")
+		target, "bash -s")
 	cmd.Stdin = strings.NewReader(truckRemoteScript(cfg.TruckLogRoot))
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -178,13 +181,17 @@ func fetchTruckRunID(ctx context.Context, cfg config, requested string) (truckRu
 	// from the exit status/stderr — never try to parse truncated stdout.
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return truckRunInfo{}, fmt.Errorf("SSH to %s timed out after %s", cfg.TruckSSHTarget, truckSSHTimeout)
+			return truckRunInfo{}, fmt.Errorf("SSH to %s timed out after %s", target, truckSSHTimeout)
 		}
 		// ssh exits 255 for its own failures (unreachable, key rejected), as
 		// opposed to a nonzero command on the far side.
 		if ee, ok := err.(*exec.ExitError); ok && ee.ExitCode() == 255 {
-			return truckRunInfo{}, fmt.Errorf("could not SSH to %s — host unreachable or the key was rejected. Test it yourself with `ssh %s` (%s)",
-				cfg.TruckSSHTarget, cfg.TruckSSHTarget, truncate(strings.TrimSpace(stderr.String()), 200))
+			hint := ""
+			if requested != "" && !hasTruckAlias(cfg, requested) {
+				hint = " If this truck shares its IP with others, use 🔑 Set up SSH for this truck first."
+			}
+			return truckRunInfo{}, fmt.Errorf("could not SSH to %s — host unreachable or the key was rejected. Test it yourself with `ssh %s` (%s).%s",
+				target, target, truncate(strings.TrimSpace(stderr.String()), 200), hint)
 		}
 		return truckRunInfo{}, fmt.Errorf("ssh failed: %v (%s)", err, truncate(strings.TrimSpace(stderr.String()), 200))
 	}

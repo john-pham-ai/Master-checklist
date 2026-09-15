@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -32,17 +33,49 @@ import (
 //	    UserKnownHostsFile ~/.ssh/known_hosts.d/truck-805
 //	    StrictHostKeyChecking accept-new
 //
-// setupTruckSSH creates the identity, appends that block to ~/.ssh/config
-// (idempotently) and installs the public key on the truck. The name is
-// forced: the only input is the vehicle number, validated like the fetch.
+// When the truck's remote (VPN) IP is supplied, a second alias is added for
+// remote login, same identity:
+//
+//	Host truck-805-remote
+//	    HostName 100.65.197.86
+//	    ...
+//
+// setupTruckSSH creates the identity, appends those blocks to ~/.ssh/config
+// (idempotently) and installs the public key on the truck. The alias names
+// are forced: the only inputs are the vehicle number (validated like the
+// fetch) and, optionally, the remote IP (validated as an IPv4 address).
 // After setup, fetches for that vehicle SSH to the alias instead of the raw
-// address (resolveTruckTarget).
+// address (resolveTruckTarget), and remote login is `ssh truck-805-remote`.
 
 // truckSetupTimeout bounds the key-install SSH round trip.
 const truckSetupTimeout = 20 * time.Second
 
+// remoteIPRe accepts a plain IPv4 address — the only thing allowed into the
+// remote alias's HostName.
+var remoteIPRe = regexp.MustCompile(`^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$`)
+
+// validRemoteIP reports whether s is a well-formed IPv4 address.
+func validRemoteIP(s string) bool {
+	m := remoteIPRe.FindStringSubmatch(s)
+	if m == nil {
+		return false
+	}
+	for _, octet := range m[1:] {
+		if len(octet) > 1 && octet[0] == '0' {
+			return false // no leading zeros
+		}
+		if n, err := strconv.Atoi(octet); err != nil || n > 255 {
+			return false
+		}
+	}
+	return true
+}
+
 // truckAlias is the SSH Host alias for a vehicle number: "truck-805".
 func truckAlias(vehicle string) string { return "truck-" + vehicle }
+
+// truckRemoteAlias is the remote-login alias: "truck-805-remote".
+func truckRemoteAlias(vehicle string) string { return truckAlias(vehicle) + "-remote" }
 
 // truckSSHDir is where the identities, config and known_hosts.d live —
 // ~/.ssh, or TRUCK_SSH_DIR when overridden (tests point it at a temp dir).
@@ -72,17 +105,23 @@ func hostBlockRe(alias string) *regexp.Regexp {
 	return regexp.MustCompile(`(?m)^\s*Host\s+` + regexp.QuoteMeta(alias) + `\s*$`)
 }
 
-// hasTruckAlias reports whether ~/.ssh/config already defines the alias for
-// this vehicle (ours or hand-written — either way `ssh truck-805` works).
-func hasTruckAlias(cfg config, vehicle string) bool {
-	if !vehicleIDRe.MatchString(vehicle) {
-		return false
-	}
+// hasSSHAlias reports whether ~/.ssh/config already defines the given alias
+// (ours or hand-written — either way `ssh <alias>` works).
+func hasSSHAlias(cfg config, alias string) bool {
 	b, err := os.ReadFile(filepath.Join(truckSSHDir(cfg), "config"))
 	if err != nil {
 		return false
 	}
-	return hostBlockRe(truckAlias(vehicle)).Match(b)
+	return hostBlockRe(alias).Match(b)
+}
+
+// hasTruckAlias reports whether ~/.ssh/config already defines the local
+// alias for this vehicle (ours or hand-written).
+func hasTruckAlias(cfg config, vehicle string) bool {
+	if !vehicleIDRe.MatchString(vehicle) {
+		return false
+	}
+	return hasSSHAlias(cfg, truckAlias(vehicle))
 }
 
 // resolveTruckTarget picks what the fetch SSHes to: the per-truck alias when
@@ -94,19 +133,21 @@ func resolveTruckTarget(cfg config, vehicle string) string {
 	return cfg.TruckSSHTarget
 }
 
-// truckConfigBlock renders the managed ~/.ssh/config block for a vehicle.
-func truckConfigBlock(cfg config, vehicle string) string {
-	alias := truckAlias(vehicle)
-	user, host := splitTarget(cfg.TruckSSHTarget)
+// truckConfigBlock renders the managed ~/.ssh/config block for one alias.
+// identity is the per-truck identity file (shared by the local and remote
+// aliases); the known-hosts file is per alias so each connection's host
+// key is stored separately.
+func truckConfigBlock(cfg config, alias, hostName, identity string) string {
+	user, _ := splitTarget(cfg.TruckSSHTarget)
 	dir := truckSSHDir(cfg)
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n# %s — added by Master Checklist truck SSH setup\n", alias)
 	fmt.Fprintf(&b, "Host %s\n", alias)
-	fmt.Fprintf(&b, "    HostName %s\n", host)
+	fmt.Fprintf(&b, "    HostName %s\n", hostName)
 	if user != "" {
 		fmt.Fprintf(&b, "    User %s\n", user)
 	}
-	fmt.Fprintf(&b, "    IdentityFile %s\n", filepath.Join(dir, alias))
+	fmt.Fprintf(&b, "    IdentityFile %s\n", filepath.Join(dir, identity))
 	b.WriteString("    IdentitiesOnly yes\n")
 	fmt.Fprintf(&b, "    UserKnownHostsFile %s\n", filepath.Join(dir, "known_hosts.d", alias))
 	b.WriteString("    StrictHostKeyChecking accept-new\n")
@@ -124,16 +165,47 @@ type truckSetupResult struct {
 	KeyInstalled  bool   `json:"key_installed"`       // public key landed in the truck's authorized_keys
 	InstallDetail string `json:"install_detail"`      // how it was installed, or why it wasn't
 	NextStep      string `json:"next_step,omitempty"` // manual command when the install failed
+
+	// Remote login (only when a remote IP was supplied).
+	RemoteAlias       string `json:"remote_alias,omitempty"`        // "truck-805-remote"
+	RemoteHost        string `json:"remote_host,omitempty"`         // the supplied IP
+	RemoteLogin       string `json:"remote_login,omitempty"`        // "applied@100.65.197.86"
+	RemoteConfigAdded bool   `json:"remote_config_added,omitempty"` // false if the block already existed
 }
 
-// setupTruckSSH does the whole setup for one vehicle: identity, config
-// block, key install. password is optional — when empty, the install uses
-// whatever key/agent already works against the truck. Only the key install
-// can fail without stopping the rest: the identity and config are still in
-// place, and the result says exactly what to run by hand.
-func setupTruckSSH(ctx context.Context, cfg config, vehicle, password string) (truckSetupResult, error) {
+// appendConfigBlock writes one managed block to ~/.ssh/config, unless the
+// alias already exists. Returns whether it wrote.
+func appendConfigBlock(cfg config, block, alias string) (bool, error) {
+	dir := truckSSHDir(cfg)
+	if hasSSHAlias(cfg, alias) {
+		return false, nil
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "config"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return false, fmt.Errorf("could not open %s: %w", filepath.Join(dir, "config"), err)
+	}
+	_, werr := f.WriteString(block)
+	cerr := f.Close()
+	if werr != nil || cerr != nil {
+		return false, fmt.Errorf("could not write %s: %v %v", filepath.Join(dir, "config"), werr, cerr)
+	}
+	return true, nil
+}
+
+// setupTruckSSH does the whole setup for one vehicle: identity, local
+// config block, an optional remote-login block, key install. password is
+// optional — when empty, the install uses whatever key/agent already works
+// against the truck. remoteIP is optional too: when given (a validated
+// IPv4), a `truck-<N>-remote` alias is added so `ssh truck-805-remote`
+// lands on applied@<remoteIP>. Only the key install can fail without
+// stopping the rest: the identity and config are still in place, and the
+// result says exactly what to run by hand.
+func setupTruckSSH(ctx context.Context, cfg config, vehicle, password, remoteIP string) (truckSetupResult, error) {
 	if !vehicleAllowed(vehicle, cfg.VehicleRange) {
 		return truckSetupResult{}, fmt.Errorf("the truck number is required and must be one of %s (got %q)", cfg.VehicleRange, vehicle)
+	}
+	if remoteIP != "" && !validRemoteIP(remoteIP) {
+		return truckSetupResult{}, fmt.Errorf("the remote IP must be a plain IPv4 address like 100.65.197.86 (got %q)", remoteIP)
 	}
 	alias := truckAlias(vehicle)
 	dir := truckSSHDir(cfg)
@@ -160,18 +232,28 @@ func setupTruckSSH(ctx context.Context, cfg config, vehicle, password string) (t
 	}
 	res.PublicKey = strings.TrimSpace(string(pub))
 
-	// 2. Config block, appended once.
-	if !hasTruckAlias(cfg, vehicle) {
-		f, err := os.OpenFile(filepath.Join(dir, "config"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	// 2. Config blocks, appended once each. The local block points at the
+	//    shared cable address; the remote block (when a remote IP was given)
+	//    at the truck's own remote IP — same identity either way, since the
+	//    authorized key on the truck is the same one.
+	_, localHost := splitTarget(cfg.TruckSSHTarget)
+	added, err := appendConfigBlock(cfg, truckConfigBlock(cfg, alias, localHost, alias), alias)
+	if err != nil {
+		return res, err
+	}
+	res.ConfigAdded = added
+
+	if remoteIP != "" {
+		remoteAlias := truckRemoteAlias(vehicle)
+		user, _ := splitTarget(cfg.TruckSSHTarget)
+		res.RemoteAlias = remoteAlias
+		res.RemoteHost = remoteIP
+		res.RemoteLogin = user + "@" + remoteIP
+		added, err := appendConfigBlock(cfg, truckConfigBlock(cfg, remoteAlias, remoteIP, alias), remoteAlias)
 		if err != nil {
-			return res, fmt.Errorf("could not open %s: %w", filepath.Join(dir, "config"), err)
+			return res, err
 		}
-		_, werr := f.WriteString(truckConfigBlock(cfg, vehicle))
-		cerr := f.Close()
-		if werr != nil || cerr != nil {
-			return res, fmt.Errorf("could not write %s: %v %v", filepath.Join(dir, "config"), werr, cerr)
-		}
-		res.ConfigAdded = true
+		res.RemoteConfigAdded = added
 	}
 
 	// 3. Install the public key on the truck.
@@ -306,9 +388,11 @@ func writeAskpassHelper() (string, error) {
 }
 
 // makeTruckSSHSetupHandler serves POST /api/truck/ssh_setup with form fields
-// vehicle (required) and password (optional). Same local-only gate as the
-// fetch; a dry run performs the real local steps (key + config) but reports
-// the install as skipped, so the flow can be tried without a truck.
+// vehicle (required), password (optional) and remote_ip (optional — the
+// truck's remote/VPN address, which adds a `truck-<N>-remote` alias).
+// Same local-only gate as the fetch; a dry run performs the real local
+// steps (key + config) but reports the install as skipped, so the flow can
+// be tried without a truck.
 func makeTruckSSHSetupHandler(cfg config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -323,9 +407,16 @@ func makeTruckSSHSetupHandler(cfg config) http.HandlerFunc {
 		}
 		vehicle := strings.TrimSpace(r.FormValue("vehicle"))
 		password := r.FormValue("password")
+		remoteIP := strings.TrimSpace(r.FormValue("remote_ip"))
 		if !vehicleAllowed(vehicle, cfg.VehicleRange) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
 				"error": fmt.Sprintf("Enter the truck number in the Vehicle field first — the SSH identity and alias are named after it (must be one of %s).", cfg.VehicleRange),
+			})
+			return
+		}
+		if remoteIP != "" && !validRemoteIP(remoteIP) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": fmt.Sprintf("The remote IP must be a plain IPv4 address like 100.65.197.86 (got %q).", remoteIP),
 			})
 			return
 		}
@@ -334,7 +425,7 @@ func makeTruckSSHSetupHandler(cfg config) http.HandlerFunc {
 			// Local steps for real, remote step skipped.
 			dry := cfg
 			dry.TruckSSHBin = "false" // any ssh attempt fails immediately
-			res, err := setupTruckSSH(r.Context(), dry, vehicle, "")
+			res, err := setupTruckSSH(r.Context(), dry, vehicle, "", remoteIP)
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 				return
@@ -344,13 +435,14 @@ func makeTruckSSHSetupHandler(cfg config) http.HandlerFunc {
 			return
 		}
 
-		res, err := setupTruckSSH(r.Context(), cfg, vehicle, password)
+		res, err := setupTruckSSH(r.Context(), cfg, vehicle, password, remoteIP)
 		if err != nil {
 			log.Printf("truck ssh setup (vehicle %q): %v", vehicle, err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
-		log.Printf("truck ssh setup (vehicle %q): key_created=%v config_added=%v key_installed=%v", vehicle, res.KeyCreated, res.ConfigAdded, res.KeyInstalled)
+		log.Printf("truck ssh setup (vehicle %q remote %q): key_created=%v config_added=%v remote_config_added=%v key_installed=%v",
+			vehicle, remoteIP, res.KeyCreated, res.ConfigAdded, res.RemoteConfigAdded, res.KeyInstalled)
 		writeJSON(w, http.StatusOK, res)
 	}
 }

@@ -43,6 +43,9 @@ fully determines the commit.
 
 ## Fetch Run ID from the truck
 
+The page's first two sections — **🔑 Truck SSH setup (local only)** and **What changed
+since the previous build** — are collapsible: click the header row to open/close them.
+
 Each Run ID field (Run Info, Disengagement, Closed Loop) gets a **🚚 Fetch from
 truck** button. Clicking it SSHes to the truck the laptop is cabled to, finds the newest
 run log directory for today and fills the field with it — the Run Info button also
@@ -99,10 +102,15 @@ Steps 1–2 always run locally and are idempotent (re-running reports "already e
 only step 3 can fail, and then the result shows the exact `ssh-copy-id` line to run by
 hand. Once the alias exists, fetches for that vehicle number SSH to `truck-<number>`
 instead of the raw address — so the 🚚 buttons only need the Vehicle field to keep
-working on every truck. The per-check 🔑 button next to 📋 Paste/attach screenshot runs
-the same setup using the Run Info Vehicle number. In the hosted (Cloud Run) app the
-endpoint answers 503 with a local-only note; a dry run performs the local steps but
-reports the key install as skipped.
+working on every truck. In the hosted (Cloud Run) app the endpoint answers 503 with a
+local-only note; a dry run performs the local steps but reports the key install as
+skipped.
+
+**Remote login.** The setup card also takes the truck's remote (VPN) IP (optional,
+validated as a plain IPv4 like `100.65.197.86`). When given, a second alias is added —
+`Host truck-805-remote` pointing at `applied@<remote IP>`, sharing the same per-truck
+identity and its own known-hosts file — so `ssh truck-805-remote` works from anywhere
+on the VPN, with the same one-time setup.
 
 ## "What changed since the previous build"
 

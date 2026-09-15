@@ -20,9 +20,12 @@
 </header>
 
 <form id="checklist-form" method="post" action="/submit" enctype="multipart/form-data">
-  <section class="card" id="truck-ssh-card">
-    <h2 data-i18n="truck_setup_heading">🔑 Truck SSH setup (local only)</h2>
-    <p class="muted small" data-i18n="truck_setup_intro">Every truck answers on the same address (whichever one this laptop is cabled to), so each truck gets its own SSH identity and alias — named after the truck number. One-time per truck: enter the truck number and, if your usual SSH key doesn't work on it yet, the truck's login password. Afterwards the Fetch buttons (and plain <code>ssh truck-&lt;number&gt;</code>) work without a password.</p>
+  <details class="card collapsible-card" id="truck-ssh-card">
+    <summary class="card-toggle">
+      <h2 data-i18n="truck_setup_heading">🔑 Truck SSH setup (local only)</h2>
+      <span class="chevron" aria-hidden="true"></span>
+    </summary>
+    <p class="muted small" data-i18n="truck_setup_intro">Every truck answers on the same address (whichever one this laptop is cabled to), so each truck gets its own SSH identity and alias — named after the truck number. One-time per truck: enter the truck number and, if your usual SSH key doesn't work on it yet, the truck's login password. Afterwards the Fetch buttons (and plain <code>ssh truck-&lt;number&gt;</code>) work without a password. Enter the truck's remote (VPN) IP as well to also add a remote-login alias (<code>ssh truck-&lt;number&gt;-remote</code>).</p>
     <div class="grid">
       <label>
         <span data-i18n="truck_setup_vehicle">Truck number</span>
@@ -33,6 +36,10 @@
         <input type="password" id="truck-setup-password" autocomplete="new-password">
       </label>
       <label>
+        <span data-i18n="truck_setup_remote_ip">Remote login IP (optional)</span>
+        <input type="text" id="truck-setup-remote-ip" inputmode="numeric" autocomplete="off" placeholder="100.65.197.86">
+      </label>
+      <label>
         <span>&nbsp;</span>
         <span class="diff-actions">
           <button type="button" class="btn-link" id="truck-setup-btn" data-i18n="truck_setup_btn">🔑 Set up SSH for this truck</button>
@@ -40,10 +47,13 @@
       </label>
     </div>
     <div id="truck-setup-status" class="muted small" hidden></div>
-  </section>
+  </details>
 
-  <section class="card" id="diff-card">
-    <h2 data-i18n="section_diff">What changed since the previous build</h2>
+  <details class="card collapsible-card" id="diff-card">
+    <summary class="card-toggle">
+      <h2 data-i18n="section_diff">What changed since the previous build</h2>
+      <span class="chevron" aria-hidden="true"></span>
+    </summary>
     <div class="grid">
       <label>
         <span data-i18n="field_diff_base">Compare against</span>
@@ -77,7 +87,7 @@
       </div>
     </div>
     <input type="hidden" name="diff_json" id="diff-json">
-  </section>
+  </details>
 
   <section class="card">
     <h2 data-i18n="section_run_info">Run Info</h2>
@@ -228,7 +238,6 @@
   </details>
   <div class="check-media" data-check-key="{{.Key}}">
     <div class="check-media-actions">
-      <button type="button" class="btn-link truck-setup-btn" data-i18n="truck_setup_btn">🔑 Set up SSH for this truck</button>
       <button type="button" class="media-btn media-btn-shot" data-i18n="media_btn_screenshot">📋 Paste / attach screenshot</button>
       <button type="button" class="media-btn media-btn-screen" data-i18n="media_btn_record_screen">🖥️ Record screen</button>
       <button type="button" class="media-btn media-btn-video" data-i18n="media_btn_attach_video">📎 Attach video file</button>

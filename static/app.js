@@ -628,6 +628,10 @@
       const keyState = res.key_created ? "created" : "already existed";
       const cfgState = res.config_added ? "added" : "already existed";
       lines.push("✅ Identity " + keyState + " (" + res.key_path + "), config block " + cfgState + " for `Host " + res.alias + "`.");
+      if (res.remote_alias) {
+        const remoteState = res.remote_config_added ? "added" : "already existed";
+        lines.push("✅ Remote login: `ssh " + res.remote_alias + "` → " + res.remote_login + " (config block " + remoteState + ").");
+      }
       if (res.key_installed) {
         lines.push("✅ Public key installed on the truck — " + res.install_detail + ".");
       } else {
@@ -647,6 +651,8 @@
     body.set("vehicle", vehicle);
     const password = document.getElementById("truck-setup-password");
     if (password) body.set("password", password.value);
+    const remoteIP = document.getElementById("truck-setup-remote-ip");
+    if (remoteIP) body.set("remote_ip", remoteIP.value.trim());
     fetch("/api/truck/ssh_setup", { method: "POST", body: body })
       .then(async (r) => ({ ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) }))
       .then(({ ok, status, data }) => {
@@ -680,22 +686,6 @@
         runTruckSetup(statusEl, vehicleInput);
       });
     }
-    // Per-check setup buttons take the number from the Run Info Vehicle
-    // field and run in the setup card.
-    document.querySelectorAll(".truck-setup-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const vehicleField = document.querySelector('input[name="vehicle"]');
-        const number = vehicleField ? vehicleField.value.trim() : "";
-        if (!number) {
-          vehicleInput.focus();
-          setTruckSetupStatus(statusEl, "⚠️ " + t("truck_setup_need_vehicle", "Enter the truck number first — the SSH identity and alias are named after it."), "error");
-          return;
-        }
-        vehicleInput.value = number;
-        truckSetupCard.scrollIntoView({ behavior: "smooth" });
-        runTruckSetup(statusEl, vehicleInput);
-      });
-    });
   }
 
   // ---- Fetch Run ID from the test truck over SSH (local-only, see truck.go). ----

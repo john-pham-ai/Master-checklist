@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,7 +73,7 @@ func readTruckFile(t *testing.T, parts ...string) string {
 
 func TestTruckConfigBlock(t *testing.T) {
 	cfg, dir := sshTestEnv(t)
-	block := truckConfigBlock(cfg, "805")
+	block := truckConfigBlock(cfg, "truck-805", "192.168.1.11", "truck-805")
 	for _, want := range []string{
 		"Host truck-805\n",
 		"    HostName 192.168.1.11\n",
@@ -90,7 +91,7 @@ func TestTruckConfigBlock(t *testing.T) {
 
 func TestSetupTruckSSHCreatesIdentityAndConfig(t *testing.T) {
 	cfg, dir := sshTestEnv(t)
-	res, err := setupTruckSSH(context.Background(), cfg, "805", "")
+	res, err := setupTruckSSH(context.Background(), cfg, "805", "", "")
 	if err != nil {
 		t.Fatalf("setupTruckSSH: %v", err)
 	}
@@ -131,7 +132,7 @@ func TestSetupTruckSSHCreatesIdentityAndConfig(t *testing.T) {
 func TestSetupTruckSSHIsIdempotent(t *testing.T) {
 	cfg, _ := sshTestEnv(t)
 	for i := 0; i < 2; i++ {
-		res, err := setupTruckSSH(context.Background(), cfg, "805", "")
+		res, err := setupTruckSSH(context.Background(), cfg, "805", "", "")
 		if err != nil {
 			t.Fatalf("run %d: %v", i+1, err)
 		}
@@ -152,7 +153,7 @@ func TestSetupTruckSSHIsIdempotent(t *testing.T) {
 func TestSetupTruckSSHForcesVehicleNumber(t *testing.T) {
 	cfg, _ := sshTestEnv(t)
 	for _, bad := range []string{"", "805; rm -rf /", "abc", "836", "80a"} {
-		if _, err := setupTruckSSH(context.Background(), cfg, bad, ""); err == nil {
+		if _, err := setupTruckSSH(context.Background(), cfg, bad, "", ""); err == nil {
 			t.Errorf("setupTruckSSH(%q) should have failed", bad)
 		}
 	}
@@ -161,7 +162,7 @@ func TestSetupTruckSSHForcesVehicleNumber(t *testing.T) {
 func TestSetupTruckSSHInstallFailureKeepsLocalSteps(t *testing.T) {
 	cfg, dir := sshTestEnv(t)
 	t.Setenv("FAKE_SSH_EXIT", "255")
-	res, err := setupTruckSSH(context.Background(), cfg, "805", "")
+	res, err := setupTruckSSH(context.Background(), cfg, "805", "", "")
 	if err != nil {
 		t.Fatalf("install failure should not fail the whole setup: %v", err)
 	}
@@ -187,7 +188,7 @@ func TestSetupTruckSSHPasswordGoesThroughAskpass(t *testing.T) {
 	// Attempt 1 (existing key) fails: exit 255 without a password on offer.
 	t.Setenv("FAKE_SSH_EXIT", "255")
 
-	res, err := setupTruckSSH(context.Background(), cfg, "805", "sekret")
+	res, err := setupTruckSSH(context.Background(), cfg, "805", "sekret", "")
 	if err != nil {
 		t.Fatalf("setupTruckSSH: %v", err)
 	}
@@ -211,7 +212,7 @@ func TestSetupTruckSSHPasswordNotAcceptedReportsDetail(t *testing.T) {
 	// attempt 2 also 255 (wrong password).
 	t.Setenv("FAKE_SSH_EXIT", "255")
 	t.Setenv("FAKE_SSH_REJECT_PASSWORD", "1")
-	res, err := setupTruckSSH(context.Background(), cfg, "805", "wrongpass")
+	res, err := setupTruckSSH(context.Background(), cfg, "805", "wrongpass", "")
 	if err != nil {
 		t.Fatalf("setupTruckSSH: %v", err)
 	}
@@ -324,7 +325,7 @@ func TestFetchFailureHintsAtSetup(t *testing.T) {
 		t.Errorf("error should hint at setup: %v", err)
 	}
 	// And after setup (alias exists), the hint disappears.
-	if _, serr := setupTruckSSH(context.Background(), cfg, "805", ""); serr != nil {
+	if _, serr := setupTruckSSH(context.Background(), cfg, "805", "", ""); serr != nil {
 		t.Fatal(serr)
 	}
 	t.Setenv("FAKE_SSH_EXIT", "255")
@@ -357,7 +358,7 @@ func TestSetupTruckSSHUnreachableIsNotAKeyRejection(t *testing.T) {
 	fake := strings.Replace(fakeSSHScript, `cat >/dev/null`,
 		`cat >/dev/null; echo 'ssh: connect to host 192.168.1.11 port 22: Connection timed out' >&2`, 1)
 	cfg.TruckSSHBin = fakeBin(t, t.TempDir(), "ssh", fake)
-	res, err := setupTruckSSH(context.Background(), cfg, "805", "")
+	res, err := setupTruckSSH(context.Background(), cfg, "805", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,5 +370,111 @@ func TestSetupTruckSSHUnreachableIsNotAKeyRejection(t *testing.T) {
 	}
 	if strings.Contains(res.InstallDetail, "key was not accepted") {
 		t.Errorf("should not claim the key was rejected: %q", res.InstallDetail)
+	}
+}
+
+func TestValidRemoteIP(t *testing.T) {
+	for _, good := range []string{"100.65.197.86", "192.168.1.11", "10.0.0.1", "255.255.255.255"} {
+		if !validRemoteIP(good) {
+			t.Errorf("validRemoteIP(%q) = false, want true", good)
+		}
+	}
+	for _, bad := range []string{"", "100.65.197", "100.65.197.256", "100.65.197.086",
+		"100.65.197.86; rm -rf /", "truck-805.remote", "ssh://100.65.197.86", "999.1.1.1", "1.2.3.4.5"} {
+		if validRemoteIP(bad) {
+			t.Errorf("validRemoteIP(%q) = true, want false", bad)
+		}
+	}
+}
+
+func TestSetupTruckSSHAddsRemoteAlias(t *testing.T) {
+	cfg, dir := sshTestEnv(t)
+	res, err := setupTruckSSH(context.Background(), cfg, "805", "", "100.65.197.86")
+	if err != nil {
+		t.Fatalf("setupTruckSSH: %v", err)
+	}
+	if res.RemoteAlias != "truck-805-remote" || res.RemoteHost != "100.65.197.86" {
+		t.Errorf("remote fields wrong: %+v", res)
+	}
+	if res.RemoteLogin != "applied@100.65.197.86" {
+		t.Errorf("remote login = %q", res.RemoteLogin)
+	}
+	conf := readTruckFile(t, dir, "config")
+	if !strings.Contains(conf, "Host truck-805-remote") || !strings.Contains(conf, "HostName 100.65.197.86") {
+		t.Errorf("remote block missing:\n%s", conf)
+	}
+	// Same identity serves both aliases.
+	if got := strings.Count(conf, "IdentityFile "+filepath.Join(dir, "truck-805")); got != 2 {
+		t.Errorf("both blocks should share the per-truck identity, found %d: \n%s", got, conf)
+	}
+
+	// Idempotent: a second run with the same IP adds nothing.
+	res2, err := setupTruckSSH(context.Background(), cfg, "805", "", "100.65.197.86")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.RemoteConfigAdded || res2.ConfigAdded || res2.KeyCreated {
+		t.Errorf("second run should reuse everything: %+v", res2)
+	}
+	if strings.Count(readTruckFile(t, dir, "config"), "Host truck-805-remote") != 1 {
+		t.Error("remote block duplicated on rerun")
+	}
+}
+
+func TestSetupTruckSSHWithoutRemoteIPHasNoRemoteAlias(t *testing.T) {
+	cfg, dir := sshTestEnv(t)
+	res, err := setupTruckSSH(context.Background(), cfg, "805", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.RemoteAlias != "" {
+		t.Errorf("no remote IP given but remote alias = %q", res.RemoteAlias)
+	}
+	if strings.Contains(readTruckFile(t, dir, "config"), "-remote") {
+		t.Error("remote block should not exist")
+	}
+}
+
+func TestSetupTruckSSHRejectsBadRemoteIP(t *testing.T) {
+	cfg, _ := sshTestEnv(t)
+	if _, err := setupTruckSSH(context.Background(), cfg, "805", "", "100.65.197.86; rm"); err == nil {
+		t.Error("bad remote IP accepted")
+	}
+}
+
+func TestTruckSSHSetupHandlerRemoteIP(t *testing.T) {
+	cfg, _ := sshTestEnv(t)
+	handler := makeTruckSSHSetupHandler(cfg)
+	post := func(form url.Values) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/truck/ssh_setup", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		return rec
+	}
+
+	// A remote IP adds the remote alias to the response and config.
+	rec := post(url.Values{"vehicle": {"805"}, "remote_ip": {"100.65.197.86"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %q", rec.Code, rec.Body.String())
+	}
+	var res truckSetupResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.RemoteAlias != "truck-805-remote" || res.RemoteLogin != "applied@100.65.197.86" {
+		t.Errorf("remote fields: %+v", res)
+	}
+
+	// A malformed remote IP is rejected before anything is written.
+	rec = post(url.Values{"vehicle": {"806"}, "remote_ip": {"100.65.197.86; rm"}})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("bad remote ip status = %d, want 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "plain IPv4 address") {
+		t.Errorf("error text: %q", rec.Body.String())
+	}
+	if strings.Contains(readTruckFile(t, cfg.TruckSSHDir, "config"), "truck-806") {
+		t.Error("rejected request should not have written a config block")
 	}
 }

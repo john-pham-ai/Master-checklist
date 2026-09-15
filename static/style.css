@@ -67,6 +67,18 @@ form { max-width: 860px; margin: 0 auto; padding: 1.5rem; }
 
 .card h2 { margin-top: 0; font-size: 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
 
+/* Collapsible cards (details.card): the summary row carries the heading
+   and a chevron that rotates open. Default marker hidden for consistency
+   across browsers. */
+details.card > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+details.card > summary::-webkit-details-marker { display: none; }
+details.card > summary h2 { margin: 0; }
+details.card > summary:hover h2 { color: var(--accent); }
+details.card > summary .chevron { color: var(--muted); font-size: 0.9rem; transition: transform 0.15s ease; }
+details.card > summary .chevron::before { content: "▸"; }
+details.card[open] > summary .chevron { transform: rotate(90deg); }
+details.card > summary ~ * { margin-top: 0; }
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

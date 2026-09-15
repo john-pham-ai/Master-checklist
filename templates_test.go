@@ -29,13 +29,19 @@ func TestTemplatesExecute(t *testing.T) {
 		`truck-fetch-btn" data-field="closed_loop_run_id"`,
 		`truck-status muted small" hidden`,
 		`data-i18n="commit_hash_hint"`,
-		// Truck SSH setup card and per-check setup buttons (truck_ssh.go).
-		`id="truck-ssh-card"`, `id="truck-setup-btn"`, `id="truck-setup-vehicle"`,
-		`truck-setup-btn" data-i18n="truck_setup_btn"`,
+		// The setup lives only in its own collapsible card: no per-check
+		// setup buttons, a remote-IP field, and the chevron summary rows.
+		`<details class="card collapsible-card" id="truck-ssh-card"`,
+		`<details class="card collapsible-card" id="diff-card"`,
+		`id="truck-setup-btn"`, `id="truck-setup-vehicle"`, `id="truck-setup-remote-ip"`,
+		`data-i18n="truck_setup_remote_ip"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("index template missing %q", want)
 		}
+	}
+	if n := strings.Count(html, `data-i18n="truck_setup_btn"`); n != 1 {
+		t.Errorf("truck_setup_btn rendered %d times, want exactly 1 (the setup card only)", n)
 	}
 
 	buf.Reset()
