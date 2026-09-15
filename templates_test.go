@@ -29,6 +29,9 @@ func TestTemplatesExecute(t *testing.T) {
 		`truck-fetch-btn" data-field="closed_loop_run_id"`,
 		`truck-status muted small" hidden`,
 		`data-i18n="commit_hash_hint"`,
+		// Truck SSH setup card and per-check setup buttons (truck_ssh.go).
+		`id="truck-ssh-card"`, `id="truck-setup-btn"`, `id="truck-setup-vehicle"`,
+		`truck-setup-btn" data-i18n="truck_setup_btn"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("index template missing %q", want)

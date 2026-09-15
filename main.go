@@ -597,6 +597,7 @@ func main() {
 	mux.HandleFunc("/api/tags", makeTagsHandler(tags))
 	mux.HandleFunc("/api/diff", newDiffService(cfg, tags, tr).handle)
 	mux.HandleFunc("/api/truck/run_id", makeTruckRunIDHandler(cfg))
+	mux.HandleFunc("/api/truck/ssh_setup", makeTruckSSHSetupHandler(cfg))
 	mux.HandleFunc("/api/engineers", makeEngineersHandler(newEngineerSource(cfg.EngineerGroups, cfg.DryRun)))
 
 	feedback := &feedbackService{cfg: cfg, data: newDataAPI(), tr: tr}

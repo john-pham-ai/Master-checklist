@@ -611,6 +611,92 @@
       .catch((err) => console.error("failed to load engineer suggestions", err));
   }
 
+  // ---- Truck SSH setup (local-only, see truck_ssh.go). ----
+  // The identity/alias must be named after the truck number, so the button
+  // refuses to guess: enter the number in the card first. Result details are
+  // shown under whichever button was clicked.
+  const truckSetupCard = document.getElementById("truck-ssh-card");
+
+  function renderTruckSetupStatus(container, ok, res, requestedVehicle) {
+    container.innerHTML = "";
+    const p = el("p", ok ? "" : "error");
+    const lines = [];
+    if (!ok) {
+      lines.push("⚠️ " + (res.error || "Setup failed."));
+    } else {
+      const keyState = res.key_created ? "created" : "already existed";
+      const cfgState = res.config_added ? "added" : "already existed";
+      lines.push("✅ Identity " + keyState + " (" + res.key_path + "), config block " + cfgState + " for `Host " + res.alias + "`.");
+      if (res.key_installed) {
+        lines.push("✅ Public key installed on the truck — " + res.install_detail + ".");
+      } else {
+        lines.push("⚠️ Public key not installed — " + res.install_detail + ".");
+        if (res.next_step) lines.push("Run it by hand, then press the fetch button again:\n" + res.next_step);
+      }
+      lines.push("Next: 🚚 Fetch from truck for " + (requestedVehicle || res.vehicle) + " now works with no password.");
+    }
+    lines.forEach(function (text) { p.appendChild(document.createTextNode(text)); p.appendChild(el("br")); });
+    container.appendChild(p);
+  }
+
+  function runTruckSetup(statusEl, vehicleInput) {
+    const vehicle = vehicleInput ? vehicleInput.value.trim() : "";
+    setTruckSetupStatus(statusEl, t("truck_setup_working", "Setting up SSH…"), "muted");
+    const body = new FormData();
+    body.set("vehicle", vehicle);
+    const password = document.getElementById("truck-setup-password");
+    if (password) body.set("password", password.value);
+    fetch("/api/truck/ssh_setup", { method: "POST", body: body })
+      .then(async (r) => ({ ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) }))
+      .then(({ ok, status, data }) => {
+        if (!ok) {
+          renderTruckSetupStatus(statusEl, false, { error: data.error || status }, vehicle);
+        } else {
+          renderTruckSetupStatus(statusEl, true, data, vehicle);
+        }
+      })
+      .catch((err) => renderTruckSetupStatus(statusEl, false, { error: err }, vehicle));
+  }
+
+  function setTruckSetupStatus(statusEl, text, cls) {
+    if (!statusEl) return;
+    statusEl.textContent = text || "";
+    statusEl.hidden = !text;
+    statusEl.className = "muted small" + (cls && cls !== "muted" ? " " + cls : "");
+  }
+
+  if (truckSetupCard) {
+    const setupBtn = document.getElementById("truck-setup-btn");
+    const vehicleInput = document.getElementById("truck-setup-vehicle");
+    const statusEl = document.getElementById("truck-setup-status");
+    if (setupBtn) {
+      setupBtn.addEventListener("click", () => {
+        if (vehicleInput && !vehicleInput.value.trim()) {
+          setTruckSetupStatus(statusEl, "⚠️ " + t("truck_setup_need_vehicle", "Enter the truck number first — the SSH identity and alias are named after it."), "error");
+          vehicleInput.focus();
+          return;
+        }
+        runTruckSetup(statusEl, vehicleInput);
+      });
+    }
+    // Per-check setup buttons take the number from the Run Info Vehicle
+    // field and run in the setup card.
+    document.querySelectorAll(".truck-setup-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const vehicleField = document.querySelector('input[name="vehicle"]');
+        const number = vehicleField ? vehicleField.value.trim() : "";
+        if (!number) {
+          vehicleInput.focus();
+          setTruckSetupStatus(statusEl, "⚠️ " + t("truck_setup_need_vehicle", "Enter the truck number first — the SSH identity and alias are named after it."), "error");
+          return;
+        }
+        vehicleInput.value = number;
+        truckSetupCard.scrollIntoView({ behavior: "smooth" });
+        runTruckSetup(statusEl, vehicleInput);
+      });
+    });
+  }
+
   // ---- Fetch Run ID from the test truck over SSH (local-only, see truck.go). ----
   // Buttons only exist when the server rendered them (TRUCK_SSH_ENABLED or
   // dry run). The vehicle comes from the Vehicle field if filled in; the

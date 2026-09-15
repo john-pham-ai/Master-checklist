@@ -76,6 +76,34 @@ field from the truck's hostname if empty.
   warning?}`. Errors are readable: unreachable/key-rejected → "could not SSH to …",
   no log dirs → "no run log directories found on the truck".
 
+### Per-truck SSH setup (the shared-IP fix)
+
+Every truck answers on the same `TRUCK_SSH_TARGET` (whichever one the laptop is cabled
+to), so plain `ssh 192.168.1.11` collides: the second truck's host key differs from the
+first's and OpenSSH refuses. The **🔑 Truck SSH setup (local only)** card does the
+one-time fix per truck — the identity and alias are **forced to be named after the truck
+number**, which is the only input it accepts (validated against `VEHICLE_RANGE`, like
+the fetch):
+
+1. `ssh-keygen -t ed25519 -f ~/.ssh/truck-805` — one identity per truck, no passphrase.
+2. An `~/.ssh/config` block: `Host truck-805 / HostName 192.168.1.11 / User applied /
+   IdentityFile ~/.ssh/truck-805 / IdentitiesOnly yes /
+   UserKnownHostsFile ~/.ssh/known_hosts.d/truck-805 / StrictHostKeyChecking accept-new`
+   — each truck gets its own host-key store, so they never collide.
+3. Installs the public key on the truck: first with your existing key/agent, then — if
+   you filled in the optional password field — with it via `SSH_ASKPASS` (the password
+   never appears on a command line and is used only for this one call). Afterwards
+   `ssh truck-805` and the 🚚 buttons work passwordless.
+
+Steps 1–2 always run locally and are idempotent (re-running reports "already existed");
+only step 3 can fail, and then the result shows the exact `ssh-copy-id` line to run by
+hand. Once the alias exists, fetches for that vehicle number SSH to `truck-<number>`
+instead of the raw address — so the 🚚 buttons only need the Vehicle field to keep
+working on every truck. The per-check 🔑 button next to 📋 Paste/attach screenshot runs
+the same setup using the Run Info Vehicle number. In the hosted (Cloud Run) app the
+endpoint answers 503 with a local-only note; a dry run performs the local steps but
+reports the key install as skipped.
+
 ## "What changed since the previous build"
 
 The first section of the form summarises what changed in `brain2` between the selected Tag
@@ -255,6 +283,8 @@ CONFLUENCE_TOKEN="<atlassian-api-token>" GITHUB_TOKEN="<github-pat>" go run .
 | `TRUCK_SSH_TARGET` | `applied@192.168.1.11` | SSH destination for the connected truck |
 | `TRUCK_LOG_ROOT` | `/media/hotswap1/frontier` | Root of the on-truck log tree |
 | `TRUCK_SSH_BIN` | `ssh` | SSH binary to invoke (test hook for a fake `ssh`) |
+| `TRUCK_KEYGEN_BIN` | `ssh-keygen` | ssh-keygen binary for the per-truck setup (test hook) |
+| `TRUCK_SSH_DIR` | `~/.ssh` | Directory holding identities/config/known_hosts.d (test hook) |
 | `PROJECT_ID`, `URL_BASE` | injected by apps-platform | Used for Vertex AI and the Data API base URL (`https://dataapi.$URL_BASE`) |
 | `CONFLUENCE_TOKEN` | — | Local dev only: use this Atlassian API token instead of Secret Manager |
 | `GITHUB_TOKEN` | — | Local dev only: use this GitHub PAT instead of Secret Manager |

@@ -117,6 +117,11 @@ type config struct {
 	TruckSSHBin     string
 	TruckSSHTarget  string
 	TruckLogRoot    string
+	// TruckKeygenBin and TruckSSHDir serve the per-truck SSH setup
+	// (truck_ssh.go): the ssh-keygen binary, and the directory holding the
+	// identities/config/known_hosts.d (default ~/.ssh; tests override).
+	TruckKeygenBin string
+	TruckSSHDir    string
 }
 
 func loadConfig() config {
@@ -146,6 +151,8 @@ func loadConfig() config {
 		TruckSSHBin:     envOrDefault("TRUCK_SSH_BIN", "ssh"),
 		TruckSSHTarget:  envOrDefault("TRUCK_SSH_TARGET", "applied@192.168.1.11"),
 		TruckLogRoot:    envOrDefault("TRUCK_LOG_ROOT", "/media/hotswap1/frontier"),
+		TruckKeygenBin:  envOrDefault("TRUCK_KEYGEN_BIN", "ssh-keygen"),
+		TruckSSHDir:     os.Getenv("TRUCK_SSH_DIR"),
 	}
 }
 
