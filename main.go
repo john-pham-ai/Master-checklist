@@ -211,34 +211,44 @@ func attachmentFilename(checkKey, kind string, index int, originalName, fallback
 	return fmt.Sprintf("%s-%s-%d.%s", checkKey, kind, index+1, ext)
 }
 
-// collectChecks reads each check's radio/notes fields plus any pasted
-// screenshots ("media_screenshot_<key>") or attached/recorded clips
-// ("media_video_<key>") from the parsed multipart form. It returns the
-// check results (with Media referencing the filenames the attachments will
-// be uploaded under) and the matching list of files still to be uploaded.
+// collectMedia reads one media group's pasted screenshots
+// ("media_screenshot_<key>") and attached/recorded clips ("media_video_<key>")
+// from the parsed multipart form. It returns the attachment refs (named as
+// they will appear on the Confluence page) and the matching files to upload.
+func collectMedia(r *http.Request, key string) ([]confluence.MediaRef, []pendingUpload) {
+	var refs []confluence.MediaRef
+	var uploads []pendingUpload
+	if r.MultipartForm != nil {
+		for i, fh := range r.MultipartForm.File["media_screenshot_"+key] {
+			name := attachmentFilename(key, "screenshot", i, fh.Filename, "png")
+			refs = append(refs, confluence.MediaRef{Filename: name, Kind: "image"})
+			uploads = append(uploads, pendingUpload{PageFilename: name, Header: fh})
+		}
+		for i, fh := range r.MultipartForm.File["media_video_"+key] {
+			name := attachmentFilename(key, "clip", i, fh.Filename, "webm")
+			refs = append(refs, confluence.MediaRef{Filename: name, Kind: "video"})
+			uploads = append(uploads, pendingUpload{PageFilename: name, Header: fh})
+		}
+	}
+	return refs, uploads
+}
+
+// collectChecks reads each check's radio/notes fields plus its media (see
+// collectMedia) from the parsed multipart form. It returns the check results
+// and the matching list of files still to be uploaded.
 func collectChecks(r *http.Request, specs []checkSpec) ([]confluence.CheckResult, []pendingUpload) {
 	results := make([]confluence.CheckResult, 0, len(specs))
 	var uploads []pendingUpload
 	for _, spec := range specs {
-		cr := confluence.CheckResult{
+		media, mediaUploads := collectMedia(r, spec.Key)
+		uploads = append(uploads, mediaUploads...)
+		results = append(results, confluence.CheckResult{
 			Key:    spec.Key,
 			Label:  spec.Label,
 			Result: r.FormValue("result_" + spec.Key),
 			Notes:  r.FormValue("notes_" + spec.Key),
-		}
-		if r.MultipartForm != nil {
-			for i, fh := range r.MultipartForm.File["media_screenshot_"+spec.Key] {
-				name := attachmentFilename(spec.Key, "screenshot", i, fh.Filename, "png")
-				cr.Media = append(cr.Media, confluence.MediaRef{Filename: name, Kind: "image"})
-				uploads = append(uploads, pendingUpload{PageFilename: name, Header: fh})
-			}
-			for i, fh := range r.MultipartForm.File["media_video_"+spec.Key] {
-				name := attachmentFilename(spec.Key, "clip", i, fh.Filename, "webm")
-				cr.Media = append(cr.Media, confluence.MediaRef{Filename: name, Kind: "video"})
-				uploads = append(uploads, pendingUpload{PageFilename: name, Header: fh})
-			}
-		}
-		results = append(results, cr)
+			Media:  media,
+		})
 	}
 	return results, uploads
 }
@@ -289,6 +299,11 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 		disengagementResults, disengagementUploads := collectChecks(r, disengagementChecks)
 		pendingMedia := append(append(preflightUploads, engagementUploads...), disengagementUploads...)
 
+		// Photos pasted into the "Notes on the changes" section ride along
+		// as the "notes" media group (no check uses that key).
+		notesMedia, notesUploads := collectMedia(r, "notes")
+		pendingMedia = append(pendingMedia, notesUploads...)
+
 		report := confluence.RunReport{
 			Tag:           r.FormValue("tag"),
 			Date:          r.FormValue("date"),
@@ -305,6 +320,8 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			Disengagement: disengagementResults,
 
 			DisengagementRunID: r.FormValue("disengagement_run_id"),
+
+			NotesMedia: notesMedia,
 		}
 
 		// The Closed Loop section only exists on the form when the tester

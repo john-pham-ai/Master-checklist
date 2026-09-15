@@ -56,6 +56,7 @@
   "diff_truncated": "Large diff: some changes were classified by title only.",
   "diff_ai_summary": "In short",
   "field_diff_notes": "Notes on the changes (optional — included on the Confluence page)",
+  "notes_media_hint": "Paste screenshots into the notes (Ctrl/Cmd+V) — they're attached to the Confluence page with your notes.",
   "diff_notes_placeholder": "Anything to call out for this build?",
   "months_short": "Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec",
   "diff_total_line": "{n} on the truck since the previous build",

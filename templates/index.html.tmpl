@@ -46,10 +46,21 @@
     </div>
     <p id="diff-status" class="muted small">The latest build of the selected test type is pre-selected and compared with the one before it. You can change either dropdown.</p>
     <div id="diff-results"></div>
-    <label class="stack">
-      <span data-i18n="field_diff_notes">Notes on the changes (optional — included on the Confluence page)</span>
-      <textarea name="diff_notes" id="diff-notes" rows="3" data-i18n-placeholder="diff_notes_placeholder" placeholder="Anything to call out for this build?"></textarea>
-    </label>
+    <div id="diff-notes-area">
+      <label class="stack">
+        <span data-i18n="field_diff_notes">Notes on the changes (optional — included on the Confluence page)</span>
+        <textarea name="diff_notes" id="diff-notes" rows="3" data-i18n-placeholder="diff_notes_placeholder" placeholder="Anything to call out for this build?"></textarea>
+      </label>
+      <div class="check-media" data-check-key="notes">
+        <span class="muted small" data-i18n="notes_media_hint">Paste screenshots into the notes (Ctrl/Cmd+V) — they're attached to the Confluence page with your notes.</span>
+        <div class="check-media-actions">
+          <button type="button" class="media-btn media-btn-shot" data-i18n="media_btn_screenshot">📋 Paste / attach screenshot</button>
+        </div>
+        <p class="media-status muted small" hidden></p>
+        <div class="media-list"></div>
+        <input type="file" name="media_screenshot_notes" class="media-input-shot" accept="image/*" multiple hidden>
+      </div>
+    </div>
     <input type="hidden" name="diff_json" id="diff-json">
   </section>
 

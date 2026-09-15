@@ -230,6 +230,8 @@ type RunReport struct {
 
 	DisengagementRunID string
 
+	NotesMedia []MediaRef // photos pasted into "Notes on the changes", attached next to Tester notes
+
 	ClosedLoop ClosedLoop // zero value (Enabled=false) means no closed loop run
 }
 
@@ -313,8 +315,9 @@ func plural(n int, one, many string) string {
 // renderDiff writes the "What changed since the previous build" section: the
 // number of changes, one plain-language sentence (and simple bullets) per
 // area, counts for everything else, and the engineering detail folded into an
-// expand macro.
-func renderDiff(b *strings.Builder, d *DiffSummary) {
+// expand macro. notesMedia carries the photos pasted into the notes text area,
+// shown right after the tester's notes.
+func renderDiff(b *strings.Builder, d *DiffSummary, notesMedia []MediaRef) {
 	b.WriteString("<h2>What changed since the previous build</h2>\n")
 	from, to := friendlyDate(d.BaseDate), friendlyDate(d.HeadDate)
 	if from == "" || to == "" {
@@ -356,6 +359,10 @@ func renderDiff(b *strings.Builder, d *DiffSummary) {
 		b.WriteString("<p><strong>Tester notes:</strong> ")
 		b.WriteString(nl2br(d.Notes))
 		b.WriteString("</p>\n")
+	}
+	if len(notesMedia) > 0 {
+		b.WriteString("<p><strong>Notes attachments:</strong></p>\n")
+		b.WriteString(mediaCell(notesMedia))
 	}
 
 	for _, c := range d.Categories {
@@ -594,7 +601,12 @@ func RenderStorageFormat(r RunReport) string {
 	var b strings.Builder
 
 	if r.Diff != nil {
-		renderDiff(&b, r.Diff)
+		renderDiff(&b, r.Diff, r.NotesMedia)
+	} else if len(r.NotesMedia) > 0 {
+		// No diff was loaded, but the tester still pasted notes photos.
+		b.WriteString("<h2>What changed since the previous build</h2>\n")
+		b.WriteString("<p><strong>Notes attachments:</strong></p>\n")
+		b.WriteString(mediaCell(r.NotesMedia))
 	}
 
 	b.WriteString("<h2>Run Summary</h2>\n")

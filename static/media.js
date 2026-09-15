@@ -186,10 +186,25 @@
     }
   });
 
-  // Routes a clipboard-pasted image to whichever check the tester last clicked
-  // into or focused — there is no single "paste target" input to listen on.
+  // Finds the .check-media that a pasted image belongs to: the one in the
+  // same check item (pasting into a check's Notes box attaches to that
+  // check), or the notes media block next to "Notes on the changes".
+  // Returns null when pasting outside any check / notes area.
+  function mediaForElement(el) {
+    if (!el || !el.closest) return null;
+    const item = el.closest(".check-item");
+    if (item) return item.querySelector(".check-media");
+    const notesArea = el.closest("#diff-notes-area");
+    if (notesArea) return notesArea.querySelector(".check-media");
+    return null;
+  }
+
+  // Routes a clipboard-pasted image to the check the tester pasted into (the
+  // Notes box of a check, or the notes area), falling back to whichever check
+  // they last clicked or focused.
   document.addEventListener("paste", (e) => {
-    if (!activeContainer) return;
+    const container = (e.target && e.target.closest ? mediaForElement(e.target) : null) || activeContainer;
+    if (!container) return;
     const clipboardData = e.clipboardData || window.clipboardData;
     if (!clipboardData) return;
     const files = [];
@@ -201,8 +216,9 @@
     });
     if (files.length) {
       e.preventDefault();
-      const key = activeContainer.getAttribute("data-check-key");
-      addFiles(activeContainer, key, "image", files);
+      markActive(container);
+      const key = container.getAttribute("data-check-key");
+      addFiles(container, key, "image", files);
     }
   });
 

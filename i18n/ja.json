@@ -56,6 +56,7 @@
   "diff_truncated": "変更が多いため、一部はタイトルのみで分類しました。",
   "diff_ai_summary": "要点",
   "field_diff_notes": "変更に関するメモ（任意・Confluenceページに掲載）",
+  "notes_media_hint": "メモ欄にスクリーンショットを貼り付け（Ctrl/Cmd+V）すると、メモと一緒にConfluenceページに添付されます。",
   "diff_notes_placeholder": "このビルドで特記すべき点は？",
   "months_short": "1月,2月,3月,4月,5月,6月,7月,8月,9月,10月,11月,12月",
   "diff_total_line": "前回ビルドからトラック上の{n}",
