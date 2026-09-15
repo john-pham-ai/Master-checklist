@@ -656,7 +656,14 @@
     const password = document.getElementById("truck-setup-password");
     if (password) body.set("password", password.value);
     const remoteIP = document.getElementById("truck-setup-remote-ip");
-    if (remoteIP) body.set("remote_ip", remoteIP.value.trim());
+    if (remoteIP) {
+      body.set("remote_ip", remoteIP.value.trim());
+      // Tell the server when the value came from the autofill, so the result
+      // is labeled correctly. Only the label changes — the IP is what counts.
+      if (remoteIP.value.trim() && remoteIP.dataset.autofilled === "1") {
+        body.set("remote_ip_source", "tailscale");
+      }
+    }
     fetch("/api/truck/ssh_setup", { method: "POST", body: body })
       .then(async (r) => ({ ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) }))
       .then(({ ok, status, data }) => {
@@ -699,7 +706,10 @@
       vehicleInput.addEventListener("input", () => {
         clearTimeout(lookupTimer);
         const vehicle = vehicleInput.value.trim();
-        if (!/^\d+$/.test(vehicle)) { setRemoteHint(""); return; }
+        // Backspacing partway (805 → 80) must not leave the old hint
+        // hanging under the field while the new lookup is pending.
+        setRemoteHint("");
+        if (!/^\d+$/.test(vehicle)) { return; }
         lookupTimer = setTimeout(() => {
           fetch("/api/truck/ssh_lookup?vehicle=" + encodeURIComponent(vehicle))
             .then(async (r) => ({ ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) }))

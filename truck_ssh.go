@@ -13,9 +13,17 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
+
+// setupMu serializes setups. appendConfigBlock is check-then-append, so two
+// concurrent setups for the same truck (a double-click, two tabs) could both
+// see "no block yet" and both append — leaving duplicate Host blocks in
+// ~/.ssh/config for good. Setups are rare and take a few seconds; one at a
+// time is fine.
+var setupMu sync.Mutex
 
 // Per-truck SSH setup.
 //
@@ -295,6 +303,8 @@ func lookupTailscaleTruck(ctx context.Context, cfg config, vehicle string) (stri
 // stopping the rest: the identity and config are still in place, and the
 // result says exactly what to run by hand.
 func setupTruckSSH(ctx context.Context, cfg config, vehicle, password, manualRemoteIP string) (truckSetupResult, error) {
+	setupMu.Lock()
+	defer setupMu.Unlock()
 	if !vehicleAllowed(vehicle, cfg.VehicleRange) {
 		return truckSetupResult{}, fmt.Errorf("the truck number is required and must be one of %s (got %q)", cfg.VehicleRange, vehicle)
 	}
@@ -561,6 +571,10 @@ func makeTruckSSHSetupHandler(cfg config) http.HandlerFunc {
 		vehicle := strings.TrimSpace(r.FormValue("vehicle"))
 		password := r.FormValue("password")
 		remoteIP := strings.TrimSpace(r.FormValue("remote_ip"))
+		// remote_ip_source=tailscale is set by the card when the IP was
+		// autofilled from the lookup rather than typed — it only changes the
+		// reported label, never the IP used.
+		autofilled := r.FormValue("remote_ip_source") == "tailscale"
 		if !vehicleAllowed(vehicle, cfg.VehicleRange) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
 				"error": fmt.Sprintf("Enter the truck number in the Vehicle field first — the SSH identity and alias are named after it (must be one of %s).", cfg.VehicleRange),
@@ -584,6 +598,9 @@ func makeTruckSSHSetupHandler(cfg config) http.HandlerFunc {
 				return
 			}
 			res.InstallDetail = "dry run — the public key was not sent to a truck"
+			if autofilled && res.RemoteSource == "manual" {
+				res.RemoteSource = "tailscale"
+			}
 			writeJSON(w, http.StatusOK, res)
 			return
 		}
@@ -593,6 +610,9 @@ func makeTruckSSHSetupHandler(cfg config) http.HandlerFunc {
 			log.Printf("truck ssh setup (vehicle %q): %v", vehicle, err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
+		}
+		if autofilled && res.RemoteSource == "manual" {
+			res.RemoteSource = "tailscale"
 		}
 		log.Printf("truck ssh setup (vehicle %q remote %q): key_created=%v config_added=%v remote_config_added=%v key_installed=%v",
 			vehicle, remoteIP, res.KeyCreated, res.ConfigAdded, res.RemoteConfigAdded, res.KeyInstalled)

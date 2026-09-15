@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -723,4 +724,56 @@ func TestTruckIPLookupHandler(t *testing.T) {
 			t.Errorf("status = %d", rec.Code)
 		}
 	})
+}
+
+func TestSetupTruckSSHConcurrentIsSerialized(t *testing.T) {
+	cfg, dir := sshTestEnv(t)
+	cfg.TruckTSBin = fakeTailscaleFor(t,
+		`"n1":{"HostName":"truck-805-primarypc","TailscaleIPs":["100.65.197.86"],"Online":true}`)
+	var wg sync.WaitGroup
+	errs := make(chan error, 4)
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Keygen races abort; config races duplicate. With the lock
+			// neither happens: every run returns nil.
+			if _, err := setupTruckSSH(context.Background(), cfg, "805", "", ""); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent setup: %v", err)
+	}
+	if n := strings.Count(readTruckFile(t, dir, "config"), "Host truck-805\n"); n != 1 {
+		t.Errorf("local Host blocks = %d, want 1", n)
+	}
+	if n := strings.Count(readTruckFile(t, dir, "config"), "Host truck-805-remote\n"); n != 1 {
+		t.Errorf("remote Host blocks = %d, want 1", n)
+	}
+}
+
+func TestTruckSSHSetupHandlerAutofilledSource(t *testing.T) {
+	cfg, _ := sshTestEnv(t)
+	cfg.TruckTSBin = "definitely-not-tailscale" // autofill happened earlier; no lookup now
+	handler := makeTruckSSHSetupHandler(cfg)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/truck/ssh_setup",
+		strings.NewReader("vehicle=805&remote_ip=10.5.5.5&remote_ip_source=tailscale"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %q", rec.Code, rec.Body.String())
+	}
+	var res truckSetupResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.RemoteSource != "tailscale" || res.RemoteHost != "10.5.5.5" {
+		t.Errorf("autofilled IP must be used and labeled tailscale: %+v", res)
+	}
 }
