@@ -106,11 +106,16 @@ working on every truck. In the hosted (Cloud Run) app the endpoint answers 503 w
 local-only note; a dry run performs the local steps but reports the key install as
 skipped.
 
-**Remote login.** The setup card also takes the truck's remote (VPN) IP (optional,
-validated as a plain IPv4 like `100.65.197.86`). When given, a second alias is added —
-`Host truck-805-remote` pointing at `applied@<remote IP>`, sharing the same per-truck
-identity and its own known-hosts file — so `ssh truck-805-remote` works from anywhere
-on the VPN, with the same one-time setup.
+**Remote login (found via Tailscale).** Pressing setup also looks the truck up in your
+Tailscale network — the trucks register as `truck-<N>-primarypc` — and adds a second
+alias `Host truck-805-remote` pointing at `applied@<its 100.x IP>`, sharing the same
+per-truck identity with its own known-hosts file, so `ssh truck-805-remote` works from
+anywhere on the VPN. No typing needed; the manual IP field is only an override. Lookup
+rules: the online twin wins when the node is listed several times; an offline truck is
+still configured, with a note; a truck that isn't on the tailnet just skips the remote
+alias with a note (the rest of the setup continues); several online IPs ask you to
+enter the right one manually. Needs the `tailscale` CLI on the laptop (override with
+`TRUCK_TS_BIN`).
 
 ## "What changed since the previous build"
 
@@ -293,6 +298,7 @@ CONFLUENCE_TOKEN="<atlassian-api-token>" GITHUB_TOKEN="<github-pat>" go run .
 | `TRUCK_SSH_BIN` | `ssh` | SSH binary to invoke (test hook for a fake `ssh`) |
 | `TRUCK_KEYGEN_BIN` | `ssh-keygen` | ssh-keygen binary for the per-truck setup (test hook) |
 | `TRUCK_SSH_DIR` | `~/.ssh` | Directory holding identities/config/known_hosts.d (test hook) |
+| `TRUCK_TS_BIN` | `tailscale` | tailscale CLI used to look up the truck's remote IP (test hook) |
 | `PROJECT_ID`, `URL_BASE` | injected by apps-platform | Used for Vertex AI and the Data API base URL (`https://dataapi.$URL_BASE`) |
 | `CONFLUENCE_TOKEN` | — | Local dev only: use this Atlassian API token instead of Secret Manager |
 | `GITHUB_TOKEN` | — | Local dev only: use this GitHub PAT instead of Secret Manager |

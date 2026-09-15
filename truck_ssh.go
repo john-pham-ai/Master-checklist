@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -166,11 +167,16 @@ type truckSetupResult struct {
 	InstallDetail string `json:"install_detail"`      // how it was installed, or why it wasn't
 	NextStep      string `json:"next_step,omitempty"` // manual command when the install failed
 
-	// Remote login (only when a remote IP was supplied).
-	RemoteAlias       string `json:"remote_alias,omitempty"`        // "truck-805-remote"
-	RemoteHost        string `json:"remote_host,omitempty"`         // the supplied IP
-	RemoteLogin       string `json:"remote_login,omitempty"`        // "applied@100.65.197.86"
-	RemoteConfigAdded bool   `json:"remote_config_added,omitempty"` // false if the block already existed
+	// Remote login. RemoteSource says where the IP came from: "tailscale"
+	// (looked up as truck-<N>-primarypc) or "manual" (typed into the card).
+	// RemoteNote carries warnings (e.g. the truck is offline in Tailscale,
+	// or the lookup failed).
+	RemoteAlias       string `json:"remote_alias,omitempty"`
+	RemoteHost        string `json:"remote_host,omitempty"`
+	RemoteLogin       string `json:"remote_login,omitempty"`
+	RemoteSource      string `json:"remote_source,omitempty"`
+	RemoteConfigAdded bool   `json:"remote_config_added"` // no omitempty: false means "already existed"
+	RemoteNote        string `json:"remote_note,omitempty"`
 }
 
 // appendConfigBlock writes one managed block to ~/.ssh/config, unless the
@@ -192,24 +198,132 @@ func appendConfigBlock(cfg config, block, alias string) (bool, error) {
 	return true, nil
 }
 
+// tailscalePeer is the subset of `tailscale status --json` that matters here.
+type tailscalePeer struct {
+	HostName     string   `json:"HostName"`
+	TailscaleIPs []string `json:"TailscaleIPs"`
+	Online       bool     `json:"Online"`
+}
+
+// tailscaleStatus is the shape of `tailscale status --json` (Peer keyed by
+// stable node key; a node can appear more than once in a large tailnet).
+type tailscaleStatus struct {
+	Peer map[string]tailscalePeer `json:"Peer"`
+}
+
+// lookupTailscaleTruck finds the truck's primary PC in the tailnet — the
+// trucks register as "truck-<N>-primarypc" (with a truck-<N>-backuppc next
+// to them, which is deliberately not picked) — and returns its Tailscale
+// IPv4 and whether it is currently online. The tailnet can list the same
+// node several times; duplicates with the same IP are collapsed, and if
+// several distinct IPs remain the online one wins (an ambiguity among
+// online nodes is an error listing them).
+func lookupTailscaleTruck(ctx context.Context, cfg config, vehicle string) (string, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second) // the whole tailnet dump can be big on slow machines
+	defer cancel()
+	host := truckAlias(vehicle) + "-primarypc"
+	cmd := exec.CommandContext(ctx, cfg.TruckTSBin, "status", "--json")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", false, fmt.Errorf("`tailscale status` timed out")
+		}
+		return "", false, fmt.Errorf("could not ask Tailscale — is the laptop on the tailnet and the `tailscale` CLI installed? (%v)", truncate(strings.TrimSpace(stderr.String()), 120))
+	}
+	var status tailscaleStatus
+	if err := json.Unmarshal(out, &status); err != nil {
+		return "", false, fmt.Errorf("could not parse `tailscale status` output: %v", err)
+	}
+
+	byIP := map[string]bool{} // ip -> any online sighting
+	seen := map[string]bool{}
+	var order []string
+	for _, p := range status.Peer {
+		if p.HostName != host {
+			continue
+		}
+		for _, ip := range p.TailscaleIPs {
+			// IPv4 only (100.x.y.z); skip the fd7a:… IPv6 twin.
+			if !validRemoteIP(ip) {
+				continue
+			}
+			// The same node can be listed several times — collapse by IP
+			// (seen is tracked separately from byIP, which is only set for
+			// online sightings, so an offline duplicate must not re-add
+			// its IP to order).
+			if !seen[ip] {
+				seen[ip] = true
+				order = append(order, ip)
+			}
+			if p.Online {
+				byIP[ip] = true
+			}
+		}
+	}
+	switch len(order) {
+	case 0:
+		return "", false, fmt.Errorf("no machine named %q found in your Tailscale network (is the truck's primary PC on the tailnet?)", host)
+	case 1:
+		return order[0], byIP[order[0]], nil
+	}
+	// Several distinct IPs for the same name: prefer the online one.
+	online := []string{}
+	for _, ip := range order {
+		if byIP[ip] {
+			online = append(online, ip)
+		}
+	}
+	switch len(online) {
+	case 1:
+		return online[0], true, nil
+	case 0:
+		return "", false, fmt.Errorf("%q exists with several IPs (%s) and none is online — enter the right IP manually", host, strings.Join(order, ", "))
+	default:
+		return "", false, fmt.Errorf("%q resolves to several online IPs (%s) — enter the right IP manually", host, strings.Join(online, ", "))
+	}
+}
+
 // setupTruckSSH does the whole setup for one vehicle: identity, local
 // config block, an optional remote-login block, key install. password is
 // optional — when empty, the install uses whatever key/agent already works
-// against the truck. remoteIP is optional too: when given (a validated
-// IPv4), a `truck-<N>-remote` alias is added so `ssh truck-805-remote`
-// lands on applied@<remoteIP>. Only the key install can fail without
+// against the truck. manualRemoteIP is optional: when given (a validated
+// IPv4) it is used for the `truck-<N>-remote` alias; when blank, the IP is
+// looked up in Tailscale (truck-<N>-primarypc) and a lookup failure just
+// skips the remote alias with a note. Only the key install can fail without
 // stopping the rest: the identity and config are still in place, and the
 // result says exactly what to run by hand.
-func setupTruckSSH(ctx context.Context, cfg config, vehicle, password, remoteIP string) (truckSetupResult, error) {
+func setupTruckSSH(ctx context.Context, cfg config, vehicle, password, manualRemoteIP string) (truckSetupResult, error) {
 	if !vehicleAllowed(vehicle, cfg.VehicleRange) {
 		return truckSetupResult{}, fmt.Errorf("the truck number is required and must be one of %s (got %q)", cfg.VehicleRange, vehicle)
 	}
-	if remoteIP != "" && !validRemoteIP(remoteIP) {
-		return truckSetupResult{}, fmt.Errorf("the remote IP must be a plain IPv4 address like 100.65.197.86 (got %q)", remoteIP)
+	if manualRemoteIP != "" && !validRemoteIP(manualRemoteIP) {
+		return truckSetupResult{}, fmt.Errorf("the remote IP must be a plain IPv4 address like 100.65.197.86 (got %q)", manualRemoteIP)
 	}
 	alias := truckAlias(vehicle)
 	dir := truckSSHDir(cfg)
 	res := truckSetupResult{Vehicle: vehicle, Alias: alias, KeyPath: filepath.Join(dir, alias)}
+
+	// The remote IP: typed in, or looked up via Tailscale. A lookup
+	// failure never blocks the rest of the setup — it costs only the
+	// remote alias, with a note saying why.
+	remoteIP := manualRemoteIP
+	if remoteIP != "" {
+		res.RemoteSource = "manual"
+	} else {
+		ip, online, err := lookupTailscaleTruck(ctx, cfg, vehicle)
+		switch {
+		case err != nil:
+			res.RemoteNote = "Remote login was skipped: " + err.Error() + ". Enter the IP manually to override."
+		default:
+			remoteIP = ip
+			res.RemoteSource = "tailscale"
+			if !online {
+				res.RemoteNote = truckAlias(vehicle) + "-primarypc is currently offline in Tailscale — the alias was added anyway."
+			}
+		}
+	}
 
 	if err := os.MkdirAll(filepath.Join(dir, "known_hosts.d"), 0o700); err != nil {
 		return res, fmt.Errorf("could not create %s: %w", dir, err)
@@ -233,7 +347,7 @@ func setupTruckSSH(ctx context.Context, cfg config, vehicle, password, remoteIP 
 	res.PublicKey = strings.TrimSpace(string(pub))
 
 	// 2. Config blocks, appended once each. The local block points at the
-	//    shared cable address; the remote block (when a remote IP was given)
+	//    shared cable address; the remote block (when a remote IP is known)
 	//    at the truck's own remote IP — same identity either way, since the
 	//    authorized key on the truck is the same one.
 	_, localHost := splitTarget(cfg.TruckSSHTarget)

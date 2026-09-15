@@ -45,6 +45,11 @@ if [ -n "$TRUCK_SSH_PASSWORD" ] && [ -z "$FAKE_SSH_REJECT_PASSWORD" ]; then exit
 exit "${FAKE_SSH_EXIT:-0}"
 `
 
+// fakeTailscaleJSON is the `tailscale status --json` the default fake
+// prints: an empty tailnet, so a blank remote IP means "lookup failed, no
+// remote alias". Tests that want the truck present install their own fake.
+const fakeTailscaleEmpty = `{"Peer":{}}`
+
 // sshTestEnv returns a config whose SSH pieces point at temp fakes.
 func sshTestEnv(t *testing.T) (config, string) {
 	t.Helper()
@@ -54,12 +59,21 @@ func sshTestEnv(t *testing.T) (config, string) {
 		TruckSSHEnabled: true,
 		TruckSSHBin:     fakeBin(t, bin, "ssh", fakeSSHScript),
 		TruckKeygenBin:  fakeBin(t, bin, "ssh-keygen", fakeKeygenScript),
+		TruckTSBin:      fakeBin(t, bin, "tailscale", "printf '%s' '"+fakeTailscaleEmpty+"'\n"),
 		TruckSSHTarget:  "applied@192.168.1.11",
 		TruckLogRoot:    "/media/hotswap1/frontier",
 		TruckSSHDir:     dir,
 		VehicleRange:    "801-835",
 	}
 	return cfg, dir
+}
+
+// fakeTailscaleFor returns a fake tailscale binary printing a tailnet with
+// the given peers (keyed arbitrarily), so a test controls what lookup sees.
+func fakeTailscaleFor(t *testing.T, peers string) string {
+	t.Helper()
+	script := "#!/bin/sh\nprintf '%s' '{\"Peer\":{" + peers + "}}'\n"
+	return fakeBin(t, t.TempDir(), "tailscale", script)
 }
 
 func readTruckFile(t *testing.T, parts ...string) string {
@@ -476,5 +490,166 @@ func TestTruckSSHSetupHandlerRemoteIP(t *testing.T) {
 	}
 	if strings.Contains(readTruckFile(t, cfg.TruckSSHDir, "config"), "truck-806") {
 		t.Error("rejected request should not have written a config block")
+	}
+}
+
+func TestLookupTailscaleTruck(t *testing.T) {
+	cfg, _ := sshTestEnv(t)
+	peer805 := `"n1":{"HostName":"truck-805-primarypc","TailscaleIPs":["100.65.197.86","fd7a:115c:a1e0::dead:beef"],"Online":true},` +
+		`"n2":{"HostName":"truck-805-backuppc","TailscaleIPs":["100.119.201.57"],"Online":true},` +
+		`"n3":{"HostName":"someone-laptop","TailscaleIPs":["100.1.2.3"],"Online":true}`
+
+	t.Run("found, online, backup pc ignored, IPv6 skipped", func(t *testing.T) {
+		cfg.TruckTSBin = fakeTailscaleFor(t, peer805)
+		ip, online, err := lookupTailscaleTruck(context.Background(), cfg, "805")
+		if err != nil {
+			t.Fatalf("lookup: %v", err)
+		}
+		if ip != "100.65.197.86" || !online {
+			t.Errorf("lookup = (%q, %v)", ip, online)
+		}
+	})
+
+	t.Run("duplicates collapse, online twin wins", func(t *testing.T) {
+		// Same node listed twice: same IP (offline copy) and a second IP —
+		// the online one must win regardless of order.
+		peers := `"a":{"HostName":"truck-807-primarypc","TailscaleIPs":["100.9.9.1"],"Online":false},` +
+			`"b":{"HostName":"truck-807-primarypc","TailscaleIPs":["100.9.9.1"],"Online":true},` +
+			`"c":{"HostName":"truck-807-primarypc","TailscaleIPs":["100.9.9.2"],"Online":false}`
+		cfg.TruckTSBin = fakeTailscaleFor(t, peers)
+		ip, online, err := lookupTailscaleTruck(context.Background(), cfg, "807")
+		if err != nil || ip != "100.9.9.1" || !online {
+			t.Errorf("lookup = (%q, %v, %v)", ip, online, err)
+		}
+	})
+
+	t.Run("offline truck still resolves, reported offline", func(t *testing.T) {
+		peers := `"a":{"HostName":"truck-805-primarypc","TailscaleIPs":["100.65.197.86"],"Online":false}`
+		cfg.TruckTSBin = fakeTailscaleFor(t, peers)
+		ip, online, err := lookupTailscaleTruck(context.Background(), cfg, "805")
+		if err != nil || ip != "100.65.197.86" || online {
+			t.Errorf("lookup = (%q, %v, %v)", ip, online, err)
+		}
+	})
+
+	t.Run("not on the tailnet", func(t *testing.T) {
+		cfg.TruckTSBin = fakeTailscaleFor(t, peer805)
+		_, _, err := lookupTailscaleTruck(context.Background(), cfg, "835")
+		if err == nil || !strings.Contains(err.Error(), `no machine named "truck-835-primarypc"`) {
+			t.Errorf("err = %v", err)
+		}
+	})
+
+	t.Run("several online IPs is an ambiguity error", func(t *testing.T) {
+		peers := `"a":{"HostName":"truck-805-primarypc","TailscaleIPs":["100.1.1.1"],"Online":true},` +
+			`"b":{"HostName":"truck-805-primarypc","TailscaleIPs":["100.2.2.2"],"Online":true}`
+		cfg.TruckTSBin = fakeTailscaleFor(t, peers)
+		_, _, err := lookupTailscaleTruck(context.Background(), cfg, "805")
+		if err == nil || !strings.Contains(err.Error(), "enter the right IP manually") {
+			t.Errorf("err = %v", err)
+		}
+	})
+
+	t.Run("missing binary is a friendly error", func(t *testing.T) {
+		cfg.TruckTSBin = "definitely-not-tailscale"
+		_, _, err := lookupTailscaleTruck(context.Background(), cfg, "805")
+		if err == nil || !strings.Contains(err.Error(), "could not ask Tailscale") {
+			t.Errorf("err = %v", err)
+		}
+	})
+
+	t.Run("garbage output is a friendly error", func(t *testing.T) {
+		cfg.TruckTSBin = fakeBin(t, t.TempDir(), "tailscale", "printf 'not json'\n")
+		_, _, err := lookupTailscaleTruck(context.Background(), cfg, "805")
+		if err == nil || !strings.Contains(err.Error(), "could not parse") {
+			t.Errorf("err = %v", err)
+		}
+	})
+}
+
+func TestSetupTruckSSHAutoLookupFromTailscale(t *testing.T) {
+	cfg, dir := sshTestEnv(t)
+	cfg.TruckTSBin = fakeTailscaleFor(t,
+		`"n1":{"HostName":"truck-805-primarypc","TailscaleIPs":["100.65.197.86"],"Online":true}`)
+
+	// Blank remote IP: the IP comes from Tailscale, no manual input.
+	res, err := setupTruckSSH(context.Background(), cfg, "805", "", "")
+	if err != nil {
+		t.Fatalf("setupTruckSSH: %v", err)
+	}
+	if res.RemoteSource != "tailscale" || res.RemoteHost != "100.65.197.86" || res.RemoteLogin != "applied@100.65.197.86" {
+		t.Errorf("auto lookup fields: %+v", res)
+	}
+	if !strings.Contains(readTruckFile(t, dir, "config"), "Host truck-805-remote") {
+		t.Error("remote block missing")
+	}
+	if res.RemoteNote != "" {
+		t.Errorf("unexpected note: %q", res.RemoteNote)
+	}
+
+	// Manual IP overrides the lookup, and no tailscale call is needed.
+	cfg2, _ := sshTestEnv(t)
+	cfg2.TruckTSBin = "definitely-not-tailscale"
+	res2, err := setupTruckSSH(context.Background(), cfg2, "805", "", "10.1.2.3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.RemoteSource != "manual" || res2.RemoteHost != "10.1.2.3" {
+		t.Errorf("manual override: %+v", res2)
+	}
+}
+
+func TestSetupTruckSSHLookupFailureOnlyCostsTheRemoteAlias(t *testing.T) {
+	cfg, dir := sshTestEnv(t)
+	cfg.TruckTSBin = "definitely-not-tailscale" // lookup fails
+
+	res, err := setupTruckSSH(context.Background(), cfg, "805", "", "")
+	if err != nil {
+		t.Fatalf("a failed lookup must not fail the whole setup: %v", err)
+	}
+	if res.RemoteAlias != "" {
+		t.Errorf("no remote alias expected: %+v", res)
+	}
+	if !strings.Contains(res.RemoteNote, "Remote login was skipped") || !strings.Contains(res.RemoteNote, "tailscale") {
+		t.Errorf("note should explain the skip: %q", res.RemoteNote)
+	}
+	if !strings.Contains(readTruckFile(t, dir, "config"), "Host truck-805") {
+		t.Error("local block missing")
+	}
+}
+
+func TestSetupTruckSSHOfflineTailscaleTruckStillConfigures(t *testing.T) {
+	cfg, _ := sshTestEnv(t)
+	cfg.TruckTSBin = fakeTailscaleFor(t,
+		`"n1":{"HostName":"truck-805-primarypc","TailscaleIPs":["100.65.197.86"],"Online":false}`)
+
+	res, err := setupTruckSSH(context.Background(), cfg, "805", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.RemoteHost != "100.65.197.86" || !strings.Contains(res.RemoteNote, "offline") {
+		t.Errorf("offline truck should still be configured with a note: %+v", res)
+	}
+}
+
+func TestTruckSSHSetupHandlerAutoLookup(t *testing.T) {
+	cfg, _ := sshTestEnv(t)
+	cfg.TruckTSBin = fakeTailscaleFor(t,
+		`"n1":{"HostName":"truck-805-primarypc","TailscaleIPs":["100.65.197.86"],"Online":true}`)
+	handler := makeTruckSSHSetupHandler(cfg)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/truck/ssh_setup", strings.NewReader("vehicle=805"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %q", rec.Code, rec.Body.String())
+	}
+	var res truckSetupResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if res.RemoteSource != "tailscale" || res.RemoteAlias != "truck-805-remote" {
+		t.Errorf("handler result: %+v", res)
 	}
 }

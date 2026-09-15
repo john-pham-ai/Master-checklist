@@ -630,7 +630,11 @@
       lines.push("✅ Identity " + keyState + " (" + res.key_path + "), config block " + cfgState + " for `Host " + res.alias + "`.");
       if (res.remote_alias) {
         const remoteState = res.remote_config_added ? "added" : "already existed";
-        lines.push("✅ Remote login: `ssh " + res.remote_alias + "` → " + res.remote_login + " (config block " + remoteState + ").");
+        const source = res.remote_source === "tailscale" ? " — found via Tailscale (" + res.remote_alias.replace("-remote", "") + "-primarypc)" : "";
+        lines.push("✅ Remote login: `ssh " + res.remote_alias + "` → " + res.remote_login + source + " (config block " + remoteState + ").");
+      }
+      if (res.remote_note) {
+        lines.push("⚠️ " + res.remote_note);
       }
       if (res.key_installed) {
         lines.push("✅ Public key installed on the truck — " + res.install_detail + ".");

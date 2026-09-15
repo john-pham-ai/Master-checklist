@@ -77,11 +77,16 @@ OpenSSHが接続を拒否します。**🔑 トラックSSHセットアップ（
 ホスト環境(Cloud Run)ではこのエンドポイントはローカル専用の503を返し、ドライランでは
 ローカル手順だけを実行し、鍵インストールをスキップしたと報告します。
 
-**リモートログイン。** セットアップカードにはトラックのリモート（VPN）IPも入力できます
-（任意。`100.65.197.86` のようなプレーンなIPv4アドレスとして検証されます）。入力すると、
-2つ目のエイリアス `Host truck-805-remote`（`applied@<リモートIP>`宛て、同じトラック専用
-鍵を共有し、専用のknown-hostsファイルを持ちます）が追加されるため、VPN上のどこからでも
-`ssh truck-805-remote` が機能します。同じ1回のセットアップで両方の接続方法が使えます。
+**リモートログイン（Tailscaleから自動検索）。** セットアップボタンを押すと、
+Tailscaleネットワーク内からトラック（`truck-<番号>-primarypc` として登録されています）を
+探し、その100.x IP宛ての2つ目のエイリアス `Host truck-805-remote`（`applied@<IP>`、
+同じトラック専用鍵を共有し、専用のknown-hostsファイルを持ちます）を追加します。VPN上の
+どこからでも `ssh truck-805-remote` が機能します。入力は不要で、IP欄は上書き用です。
+検索のルール：同じノードが複数回リストされている場合はオンラインのものを採用。
+オフラインのトラックも設定され注意書きが付きます。テールネットにいないトラックは
+リモートエイリアスのスキップと注意書きのみで、セットアップの他の部分は続行します。
+オンラインのIPが複数ある場合は手動入力を求めます。ラップトップに `tailscale` CLIが
+必要です（`TRUCK_TS_BIN` で上書き可）。
 
 ## ローカル開発
 
@@ -122,6 +127,9 @@ CONFLUENCE_DRY_RUN=true TRUCK_SSH_ENABLED=true go run .
 | `TRUCK_SSH_TARGET` | `applied@192.168.1.11` | 接続中トラックへのSSH接続先 |
 | `TRUCK_LOG_ROOT` | `/media/hotswap1/frontier` | トラック上のログルート |
 | `TRUCK_SSH_BIN` | `ssh` | 呼び出すSSHバイナリ（テスト用のfake sshに差し替えるためのもの） |
+| `TRUCK_KEYGEN_BIN` | `ssh-keygen` | セットアップ用のssh-keygenバイナリ（テスト用フック） |
+| `TRUCK_SSH_DIR` | `~/.ssh` | 鍵・config・known_hosts.dを置くディレクトリ（テスト用フック） |
+| `TRUCK_TS_BIN` | `tailscale` | リモートIP検索に使うtailscale CLI（テスト用フック） |
 
 ## シークレットとデプロイ(apps-platform)
 

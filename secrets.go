@@ -117,11 +117,13 @@ type config struct {
 	TruckSSHBin     string
 	TruckSSHTarget  string
 	TruckLogRoot    string
-	// TruckKeygenBin and TruckSSHDir serve the per-truck SSH setup
-	// (truck_ssh.go): the ssh-keygen binary, and the directory holding the
-	// identities/config/known_hosts.d (default ~/.ssh; tests override).
+	// TruckKeygenBin, TruckSSHDir and TruckTSBin serve the per-truck SSH
+	// setup (truck_ssh.go): the ssh-keygen binary, the directory holding the
+	// identities/config/known_hosts.d (default ~/.ssh; tests override), and
+	// the tailscale CLI used to look up truck-<N>-primarypc's IP.
 	TruckKeygenBin string
 	TruckSSHDir    string
+	TruckTSBin     string
 }
 
 func loadConfig() config {
@@ -153,6 +155,7 @@ func loadConfig() config {
 		TruckLogRoot:    envOrDefault("TRUCK_LOG_ROOT", "/media/hotswap1/frontier"),
 		TruckKeygenBin:  envOrDefault("TRUCK_KEYGEN_BIN", "ssh-keygen"),
 		TruckSSHDir:     os.Getenv("TRUCK_SSH_DIR"),
+		TruckTSBin:      envOrDefault("TRUCK_TS_BIN", "tailscale"),
 	}
 }
 
