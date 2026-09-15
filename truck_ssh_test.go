@@ -653,3 +653,74 @@ func TestTruckSSHSetupHandlerAutoLookup(t *testing.T) {
 		t.Errorf("handler result: %+v", res)
 	}
 }
+
+func TestTruckIPLookupHandler(t *testing.T) {
+	cfg, _ := sshTestEnv(t)
+	cfg.TruckTSBin = fakeTailscaleFor(t,
+		`"n1":{"HostName":"truck-805-primarypc","TailscaleIPs":["100.65.197.86"],"Online":true}`)
+	handler := makeTruckIPLookupHandler(cfg)
+
+	t.Run("found online", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		handler(rec, httptest.NewRequest(http.MethodGet, "/api/truck/ssh_lookup?vehicle=805", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, body %q", rec.Code, rec.Body.String())
+		}
+		var res struct {
+			IP     string `json:"ip"`
+			Online bool   `json:"online"`
+			Host   string `json:"host"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+			t.Fatal(err)
+		}
+		if res.IP != "100.65.197.86" || !res.Online || res.Host != "truck-805-primarypc" {
+			t.Errorf("result = %+v", res)
+		}
+	})
+
+	t.Run("not on the tailnet is 200 with the reason, not an error", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		handler(rec, httptest.NewRequest(http.MethodGet, "/api/truck/ssh_lookup?vehicle=804", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d", rec.Code)
+		}
+		var res struct {
+			IP    string `json:"ip"`
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+			t.Fatal(err)
+		}
+		if res.IP != "" || !strings.Contains(res.Error, "truck-804-primarypc") {
+			t.Errorf("result = %+v", res)
+		}
+	})
+
+	t.Run("bad vehicle is 400", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		handler(rec, httptest.NewRequest(http.MethodGet, "/api/truck/ssh_lookup?vehicle=9999", nil))
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("status = %d", rec.Code)
+		}
+	})
+
+	t.Run("POST is 405", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		handler(rec, httptest.NewRequest(http.MethodPost, "/api/truck/ssh_lookup", nil))
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("status = %d", rec.Code)
+		}
+	})
+
+	t.Run("disabled and not dry run is 503 like the setup", func(t *testing.T) {
+		cfg := cfg
+		cfg.TruckSSHEnabled = false
+		cfg.DryRun = false
+		rec := httptest.NewRecorder()
+		makeTruckIPLookupHandler(cfg)(rec, httptest.NewRequest(http.MethodGet, "/api/truck/ssh_lookup?vehicle=805", nil))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("status = %d", rec.Code)
+		}
+	})
+}

@@ -680,6 +680,48 @@
     const setupBtn = document.getElementById("truck-setup-btn");
     const vehicleInput = document.getElementById("truck-setup-vehicle");
     const statusEl = document.getElementById("truck-setup-status");
+    const remoteIP = document.getElementById("truck-setup-remote-ip");
+    const remoteHint = document.getElementById("truck-remote-hint");
+
+    // Autofill the remote IP from Tailscale once the truck number is in.
+    // Never clobbers a manually typed IP: we only overwrite while the field
+    // is empty or still holds our last autofill.
+    let lookupTimer = null;
+    function setRemoteHint(text) {
+      if (!remoteHint) return;
+      remoteHint.textContent = text || "";
+      remoteHint.hidden = !text;
+    }
+    if (vehicleInput && remoteIP) {
+      remoteIP.addEventListener("input", () => {
+        remoteIP.dataset.autofilled = "0"; // manual edit beats the lookup
+      });
+      vehicleInput.addEventListener("input", () => {
+        clearTimeout(lookupTimer);
+        const vehicle = vehicleInput.value.trim();
+        if (!/^\d+$/.test(vehicle)) { setRemoteHint(""); return; }
+        lookupTimer = setTimeout(() => {
+          fetch("/api/truck/ssh_lookup?vehicle=" + encodeURIComponent(vehicle))
+            .then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) }))
+            .then(({ ok, data }) => {
+              if (vehicleInput.value.trim() !== vehicle) return; // user moved on
+              if (!ok) { setRemoteHint(""); return; } // hosted/local-off note: leave the field alone
+              if (data.ip) {
+                if (!remoteIP.value.trim() || remoteIP.dataset.autofilled === "1") {
+                  remoteIP.value = data.ip;
+                  remoteIP.dataset.autofilled = "1";
+                }
+                setRemoteHint(data.online
+                  ? "✅ " + t("truck_lookup_online", "found via Tailscale") + " — " + data.ip
+                  : "⚠️ " + t("truck_lookup_offline", "found via Tailscale, currently offline — the alias will still be added") + " — " + data.ip);
+              } else {
+                setRemoteHint("⚠️ " + (data.error || t("truck_lookup_not_found", "not on your Tailscale — leave blank or type the IP")));
+              }
+            })
+            .catch(() => setRemoteHint(""));
+        }, 400);
+      });
+    }
     if (setupBtn) {
       setupBtn.addEventListener("click", () => {
         if (vehicleInput && !vehicleInput.value.trim()) {

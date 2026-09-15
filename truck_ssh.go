@@ -501,6 +501,45 @@ func writeAskpassHelper() (string, error) {
 	return f.Name(), nil
 }
 
+// makeTruckIPLookupHandler serves GET /api/truck/ssh_lookup?vehicle=N — just
+// the Tailscale lookup, so the UI can autofill the remote-IP field as soon
+// as the truck number is typed. Same local-only gate as the setup: the
+// hosted app has no tailscale to ask. A truck missing from the tailnet is
+// a normal outcome for the form (the user may type the IP by hand), so it
+// comes back 200 with the reason in "error" and an empty ip.
+func makeTruckIPLookupHandler(cfg config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !cfg.TruckSSHEnabled && !cfg.DryRun {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+				"error": "The remote-IP lookup only works when the app runs locally — it asks the tailscale CLI on this laptop.",
+			})
+			return
+		}
+		vehicle := strings.TrimSpace(r.FormValue("vehicle"))
+		if !vehicleAllowed(vehicle, cfg.VehicleRange) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": fmt.Sprintf("Enter the truck number first (must be one of %s).", cfg.VehicleRange),
+			})
+			return
+		}
+		ip, online, err := lookupTailscaleTruck(r.Context(), cfg, vehicle)
+		if err != nil {
+			log.Printf("truck ip lookup (vehicle %q): %v", vehicle, err)
+			writeJSON(w, http.StatusOK, map[string]any{"ip": "", "online": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ip":     ip,
+			"online": online,
+			"host":   truckAlias(vehicle) + "-primarypc",
+		})
+	}
+}
+
 // makeTruckSSHSetupHandler serves POST /api/truck/ssh_setup with form fields
 // vehicle (required), password (optional) and remote_ip (optional — the
 // truck's remote/VPN address, which adds a `truck-<N>-remote` alias).

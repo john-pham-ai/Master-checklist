@@ -110,7 +110,10 @@ skipped.
 Tailscale network — the trucks register as `truck-<N>-primarypc` — and adds a second
 alias `Host truck-805-remote` pointing at `applied@<its 100.x IP>`, sharing the same
 per-truck identity with its own known-hosts file, so `ssh truck-805-remote` works from
-anywhere on the VPN. No typing needed; the manual IP field is only an override. Lookup
+anywhere on the VPN. No typing needed; the manual IP field is only an override. As soon
+as the truck number is typed, the field autofills from the same lookup
+(`GET /api/truck/ssh_lookup?vehicle=N`, a small hint shows what was found) — a manually
+typed IP is never clobbered. Lookup
 rules: the online twin wins when the node is listed several times; an offline truck is
 still configured, with a note; a truck that isn't on the tailnet just skips the remote
 alias with a note (the rest of the setup continues); several online IPs ask you to

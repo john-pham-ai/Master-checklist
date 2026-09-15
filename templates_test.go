@@ -34,6 +34,7 @@ func TestTemplatesExecute(t *testing.T) {
 		`<details class="card collapsible-card" id="truck-ssh-card"`,
 		`<details class="card collapsible-card" id="diff-card"`,
 		`id="truck-setup-btn"`, `id="truck-setup-vehicle"`, `id="truck-setup-remote-ip"`,
+		`id="truck-remote-hint"`,
 		`data-i18n="truck_setup_remote_ip"`,
 	} {
 		if !strings.Contains(html, want) {
