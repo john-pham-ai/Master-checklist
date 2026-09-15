@@ -164,12 +164,13 @@ type formData struct {
 	GithubURL           string
 	CurrentEngineer     string   // signed-in user's name (from IAP), pre-fills Test Engineer
 	Vehicles            []string // Vehicle field autofill options, e.g. 801..835
+	TruckSSH            bool     // render "Fetch from truck" buttons (local-only feature, truck.go)
 	AssetVersion        string   // cache-busting token for /static and /i18n URLs
 }
 
 const githubURL = "https://github.com/john-pham-ai/Master-checklist"
 
-func makeIndexHandler(vehicles []string) http.HandlerFunc {
+func makeIndexHandler(cfg config, vehicles []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data := formData{
 			PreflightChecks:     preflightChecks,
@@ -180,7 +181,10 @@ func makeIndexHandler(vehicles []string) http.HandlerFunc {
 			GithubURL:           githubURL,
 			CurrentEngineer:     currentEngineerName(r),
 			Vehicles:            vehicles,
-			AssetVersion:        assetVersion,
+			// Dry-run also enables the buttons so the whole fetch flow can be
+			// exercised locally without a truck; deployed prod never sets DryRun.
+			TruckSSH:     cfg.TruckSSHEnabled || cfg.DryRun,
+			AssetVersion: assetVersion,
 		}
 		setTridentCookie(w)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -411,18 +415,32 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 	}
 }
 
-// tagCache caches the full tag list from GitHub for a short time, since the
-// list only changes when a new tag is pushed and the datalist may be
-// refreshed on every keystroke.
+// tagCache caches the full tag list (name + commit SHA) from GitHub for a
+// short time, since the list only changes when a new tag is pushed and the
+// datalist may be refreshed on every keystroke.
 type tagCache struct {
 	cfg config
 
 	mu        sync.Mutex
-	tags      []string
+	tags      []githubTag
 	fetchedAt time.Time
 }
 
 const tagCacheTTL = 60 * time.Second
+
+// tagInfo is one entry of the /api/tags response: a build and the commit it
+// points at. The browser uses the SHA to auto-fill the Commit Hash field.
+type tagInfo struct {
+	Name string `json:"name"`
+	SHA  string `json:"sha"`
+}
+
+func mkSampleTag(name, sha string) githubTag {
+	var t githubTag
+	t.Name = name
+	t.Commit.SHA = sha
+	return t
+}
 
 var dryRunSampleTags = []string{
 	"trucking-scheduled-night-2026-09-01",
@@ -432,12 +450,21 @@ var dryRunSampleTags = []string{
 	"trucking-candidate-2026-08-26-00",
 }
 
-func (c *tagCache) Get(ctx context.Context) ([]string, error) {
+var dryRunSampleTagInfos = []githubTag{
+	mkSampleTag("trucking-scheduled-night-2026-09-01", "b17c0ffee4e5e6a7b8c9d0e1f2a3b4c5d6e7f809"),
+	mkSampleTag("trucking-scheduled-night-2026-08-31", "a16bf0fee4e5e6a7b8c9d0e1f2a3b4c5d6e7f708"),
+	mkSampleTag("trucking-scheduled-night-2026-08-30", "915ae0fee4e5e6a7b8c9d0e1f2a3b4c5d6e7f607"),
+	mkSampleTag("trucking-candidate-2026-08-26-01", "8149d0fee4e5e6a7b8c9d0e1f2a3b4c5d6e7f506"),
+	mkSampleTag("trucking-candidate-2026-08-26-00", "7138c0fee4e5e6a7b8c9d0e1f2a3b4c5d6e7f405"),
+}
+
+// infos returns the cached tags with their commit SHAs.
+func (c *tagCache) infos(ctx context.Context) ([]githubTag, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.cfg.DryRun {
-		return dryRunSampleTags, nil
+		return dryRunSampleTagInfos, nil
 	}
 
 	if time.Since(c.fetchedAt) < tagCacheTTL && c.tags != nil {
@@ -458,9 +485,22 @@ func (c *tagCache) Get(ctx context.Context) ([]string, error) {
 	return tags, nil
 }
 
+// Get returns just the tag names (the diff service works with names).
+func (c *tagCache) Get(ctx context.Context) ([]string, error) {
+	tags, err := c.infos(ctx)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, len(tags))
+	for i, t := range tags {
+		names[i] = t.Name
+	}
+	return names, nil
+}
+
 func makeTagsHandler(cache *tagCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tags, err := cache.Get(r.Context())
+		tags, err := cache.infos(r.Context())
 		if err != nil {
 			log.Printf("fetchGithubTags error: %v", err)
 			http.Error(w, "failed to fetch tags", http.StatusBadGateway)
@@ -472,8 +512,13 @@ func makeTagsHandler(cache *tagCache) http.HandlerFunc {
 			filterWord = "candidate"
 		}
 
+		filtered := filterTags(tags, filterWord)
+		out := make([]tagInfo, len(filtered))
+		for i, t := range filtered {
+			out[i] = tagInfo{Name: t.Name, SHA: t.Commit.SHA}
+		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(filterTags(tags, filterWord))
+		json.NewEncoder(w).Encode(out)
 	}
 }
 
@@ -551,10 +596,11 @@ func main() {
 	tr := newTranslator(cfg.ProjectID, cfg.DryRun)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", makeIndexHandler(parseVehicleRange(cfg.VehicleRange)))
+	mux.HandleFunc("/", makeIndexHandler(cfg, parseVehicleRange(cfg.VehicleRange)))
 	mux.HandleFunc("/submit", makeSubmitHandler(cfg))
 	mux.HandleFunc("/api/tags", makeTagsHandler(tags))
 	mux.HandleFunc("/api/diff", newDiffService(cfg, tags, tr).handle)
+	mux.HandleFunc("/api/truck/run_id", makeTruckRunIDHandler(cfg))
 	mux.HandleFunc("/api/engineers", makeEngineersHandler(newEngineerSource(cfg.EngineerGroups, cfg.DryRun)))
 
 	feedback := &feedbackService{cfg: cfg, data: newDataAPI(), tr: tr}

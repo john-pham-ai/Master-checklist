@@ -14,6 +14,11 @@ import (
 
 type githubTag struct {
 	Name string `json:"name"`
+	// Commit.SHA is the commit the tag points at; the REST list-tags endpoint
+	// reports the peeled commit SHA even for annotated tags.
+	Commit struct {
+		SHA string `json:"sha"`
+	} `json:"commit"`
 }
 
 // maxTagPages bounds pagination. brain2 has ~450 tags (5 pages of 100) as of
@@ -48,14 +53,14 @@ func githubGetJSON(ctx context.Context, token, u string, out interface{}) error 
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
-// fetchGithubTags lists ALL tag names for owner/repo via the GitHub REST API,
-// following Link-header pagination, using a personal access token for auth
-// (the repo is private).
-func fetchGithubTags(owner, repo, token string) ([]string, error) {
+// fetchGithubTags lists ALL tags (name + the commit SHA each points at) for
+// owner/repo via the GitHub REST API, following Link-header pagination, using
+// a personal access token for auth (the repo is private).
+func fetchGithubTags(owner, repo, token string) ([]githubTag, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/tags?per_page=100", owner, repo)
 
-	var names []string
+	var tags []githubTag
 	for page := 1; url != "" && page <= maxTagPages; page++ {
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
@@ -68,49 +73,47 @@ func fetchGithubTags(owner, repo, token string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		var tags []githubTag
+		var pageTags []githubTag
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
 			return nil, fmt.Errorf("github tags request failed (page %d): %s", page, resp.Status)
 		}
-		err = json.NewDecoder(resp.Body).Decode(&tags)
+		err = json.NewDecoder(resp.Body).Decode(&pageTags)
 		resp.Body.Close()
 		if err != nil {
 			return nil, err
 		}
-		for _, t := range tags {
-			names = append(names, t.Name)
-		}
+		tags = append(tags, pageTags...)
 
 		url = ""
 		if m := nextLinkRe.FindStringSubmatch(resp.Header.Get("Link")); m != nil {
 			url = m[1]
 		}
 	}
-	return names, nil
+	return tags, nil
 }
 
 // tagDateRe matches the YYYY-MM-DD(-NN) run stamp embedded in brain2 tag names,
 // e.g. trucking-scheduled-night-2026-09-01 or trucking-candidate-2026-08-26-01.
 var tagDateRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}(?:-\d+)?`)
 
-// filterTags keeps only tag names containing the given substring
+// filterTags keeps only tags whose name contains the given substring
 // (case-insensitive), newest first: sorted by the embedded run date
 // descending (so trucking-scheduled-night-2026-09-01 precedes
 // verified/trucking-scheduled-night-2026-08-04), then by name descending.
-func filterTags(tags []string, contains string) []string {
-	filtered := make([]string, 0, len(tags))
+func filterTags(tags []githubTag, contains string) []githubTag {
+	filtered := make([]githubTag, 0, len(tags))
 	for _, t := range tags {
-		if strings.Contains(strings.ToLower(t), strings.ToLower(contains)) {
+		if strings.Contains(strings.ToLower(t.Name), strings.ToLower(contains)) {
 			filtered = append(filtered, t)
 		}
 	}
 	sort.SliceStable(filtered, func(i, j int) bool {
-		di, dj := tagDateRe.FindString(filtered[i]), tagDateRe.FindString(filtered[j])
+		di, dj := tagDateRe.FindString(filtered[i].Name), tagDateRe.FindString(filtered[j].Name)
 		if di != dj {
 			return di > dj
 		}
-		return filtered[i] > filtered[j]
+		return filtered[i].Name > filtered[j].Name
 	})
 	return filtered
 }

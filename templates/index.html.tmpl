@@ -90,6 +90,7 @@
       <label>
         <span data-i18n="field_commit_hash">Commit Hash</span>
         <input type="text" name="commit_hash" required>
+        <span class="muted small" data-i18n="commit_hash_hint">Auto-filled from the selected build</span>
       </label>
       <label>
         <span data-i18n="field_slack_thread">Slack Thread</span>
@@ -101,9 +102,11 @@
         <a href="https://drive.google.com/drive/folders/0AA2bNJa-T_ApUk9PVA" target="_blank" rel="noopener" class="field-hint" data-i18n="drive_folder_hint">Shared Drive folder</a>
         <input type="url" name="recording_link" placeholder="https://drive.google.com/...">
       </label>
-      <label>
+      <label for="run-id-input">
         <span data-i18n="field_run_id">Run ID</span>
-        <input type="text" name="run_id" required>
+        {{if .TruckSSH}}<button type="button" class="btn-link truck-fetch-btn" data-field="run_id" data-notes="logs_recording" data-i18n="truck_fetch">🚚 Fetch from truck</button>{{end}}
+        <input type="text" name="run_id" id="run-id-input" required>
+        {{if .TruckSSH}}<span class="truck-status muted small" hidden></span>{{end}}
       </label>
       <label>
         <span data-i18n="field_overall_result">Overall Result</span>
@@ -136,9 +139,11 @@
   <section class="card">
     <h2 data-i18n="section_disengagement">Disengagement Checks</h2>
     <div class="grid">
-      <label>
+      <label for="disengagement-run-id-input">
         <span data-i18n="field_disengagement_run_id">Run ID</span>
-        <input type="text" name="disengagement_run_id">
+        {{if .TruckSSH}}<button type="button" class="btn-link truck-fetch-btn" data-field="disengagement_run_id" data-i18n="truck_fetch">🚚 Fetch from truck</button>{{end}}
+        <input type="text" name="disengagement_run_id" id="disengagement-run-id-input">
+        {{if .TruckSSH}}<span class="truck-status muted small" hidden></span>{{end}}
       </label>
     </div>
     {{range .DisengagementChecks}}{{template "check_item" .}}{{end}}
@@ -147,9 +152,11 @@
   <section class="card" id="closed-loop-card" hidden>
     <h2 data-i18n="section_closed_loop">Closed Loop</h2>
     <div class="grid">
-      <label>
+      <label for="closed-loop-run-id-input">
         <span data-i18n="field_closed_loop_run_id">Run ID</span>
-        <input type="text" name="closed_loop_run_id">
+        {{if .TruckSSH}}<button type="button" class="btn-link truck-fetch-btn" data-field="closed_loop_run_id" data-i18n="truck_fetch">🚚 Fetch from truck</button>{{end}}
+        <input type="text" name="closed_loop_run_id" id="closed-loop-run-id-input">
+        {{if .TruckSSH}}<span class="truck-status muted small" hidden></span>{{end}}
       </label>
       <label>
         <span data-i18n="field_closed_loop_maneuvers">Maneuvers</span>

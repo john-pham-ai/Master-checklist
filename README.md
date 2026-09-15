@@ -17,8 +17,9 @@ header.
   [Ext-Applied-Frontier/brain2](https://github.com/Ext-Applied-Frontier/brain2/tags) —
   `scheduled-night` tags for Master, `candidate` tags for Candidate), Date, Vehicle
   (autofill 801–835, see `VEHICLE_RANGE`), Test Engineer (pre-filled with the signed-in
-  user, autofill from the access groups), Commit Hash, Slack Thread, Recording (Google
-  Drive link), Run ID, Overall Result
+  user, autofill from the access groups), Commit Hash (auto-filled with the commit the
+  selected Tag points at), Slack Thread, Recording (Google Drive link), Run ID, Overall
+  Result
 - Preflight: `run_syscheck` results, `check_timesync` results, software build & launch,
   health monitor healthy, logs recording in `/media/hotswap1/frontier/`
 - Engagement checks
@@ -29,6 +30,46 @@ header.
   (Google Drive link). Its contents land in a "Closed Loop" block on the
   Confluence page only when the checkbox was ticked; passes without it are
   unchanged.
+
+## Commit Hash auto-fill
+
+The **Commit Hash** field is filled automatically with the commit that the selected Tag
+points at (GitHub reports the peeled commit SHA for each tag, also for annotated ones).
+`GET /api/tags?test_type=<master|candidate>` now returns `[{name, sha}]`; the browser
+keeps a name→SHA map and writes it into the field whenever the Tag dropdown changes —
+including the automatic pre-selection of the latest build on page load. The field stays
+editable; a manual edit is simply overwritten on the next tag change, since the tag
+fully determines the commit.
+
+## Fetch Run ID from the truck (local only)
+
+Each Run ID field (Run Info, Disengagement, Closed Loop) can get a **🚚 Fetch from
+truck** button. Clicking it SSHes to the truck the laptop is cabled to, finds the newest
+run log directory for today and fills the field with it — the Run Info button also
+writes the full log path into the *Logs recording* check's notes, and fills the Vehicle
+field from the truck's hostname if empty.
+
+```
+/media/hotswap1/frontier/truck-805/2026/09/15/2026-09-15_14-48-57_truck-805
+                       └ vehicle ┘└ year/month/day ┘ └──── run_id ────┘
+```
+
+- **Local only.** Cloud Run has no route to the trucks, so the buttons are not rendered
+  in the deployed app. Locally run with `TRUCK_SSH_ENABLED=true go run .` (dry run also
+  renders them and serves a fake run so the UI flow can be exercised without a truck).
+- **Your own SSH credentials.** The app shells out to the system `ssh`
+  (`-o BatchMode=yes -o StrictHostKeyChecking=accept-new`), so your `~/.ssh` keys, agent
+  and config are used as-is — no keys are stored in the app.
+- **Fixed command.** The browser only sends an optional vehicle number (validated
+  digits-only and against `VEHICLE_RANGE`); the remote script is built server-side
+  (`truck.go`), derives the truck from its own hostname, and runs a fixed `ls|sort|tail`
+  — nothing from the request is interpolated into a shell.
+- **Today vs. earlier.** The newest run of the truck's own *today* is preferred; if
+  there is none yet today, the newest overall is used with a visible warning. A vehicle
+  number that doesn't match the connected truck is also a warning, not an error.
+- `GET /api/truck/run_id?vehicle=<number>` → `{vehicle, run_id, path, date, hostname,
+  warning?}`. Errors are readable: unreachable/key-rejected → "could not SSH to …",
+  no log dirs → "no run log directories found on the truck".
 
 ## "What changed since the previous build"
 
@@ -171,6 +212,14 @@ CONFLUENCE_DRY_RUN=true go run .
 
 Then open http://localhost:8080.
 
+Dry run also renders the "Fetch from truck" buttons (with a fake run, see
+[Fetch Run ID from the truck](#fetch-run-id-from-the-truck-local-only)). For the real
+thing, connect to the truck's network and run:
+
+```sh
+CONFLUENCE_DRY_RUN=true TRUCK_SSH_ENABLED=true go run .
+```
+
 To exercise the real Confluence/GitHub integrations locally, bypass Secret Manager by
 passing the tokens as env vars (never commit these):
 
@@ -197,6 +246,10 @@ CONFLUENCE_TOKEN="<atlassian-api-token>" GITHUB_TOKEN="<github-pat>" go run .
 | `TRANSLATE_MODEL` | `gemini-2.5-flash` | Vertex AI model used to translate Japanese feedback to English |
 | `VERTEX_LOCATION` | `us-central1` | Vertex AI region |
 | `TRANSLATE_DISABLED` | `false` | Skip translation entirely |
+| `TRUCK_SSH_ENABLED` | `false` | Enable the "Fetch from truck" buttons + `/api/truck/run_id` (local only) |
+| `TRUCK_SSH_TARGET` | `applied@192.168.1.11` | SSH destination for the connected truck |
+| `TRUCK_LOG_ROOT` | `/media/hotswap1/frontier` | Root of the on-truck log tree |
+| `TRUCK_SSH_BIN` | `ssh` | SSH binary to invoke (test hook for a fake `ssh`) |
 | `PROJECT_ID`, `URL_BASE` | injected by apps-platform | Used for Vertex AI and the Data API base URL (`https://dataapi.$URL_BASE`) |
 | `CONFLUENCE_TOKEN` | — | Local dev only: use this Atlassian API token instead of Secret Manager |
 | `GITHUB_TOKEN` | — | Local dev only: use this GitHub PAT instead of Secret Manager |

@@ -121,7 +121,9 @@
   const diffLink = document.getElementById("diff-compare-link");
   const diffReload = document.getElementById("diff-reload");
   const tagFamily = (tag) => tag.replace(/\d{4}-\d{2}-\d{2}(-\d+)?$/, "");
-  let knownTags = []; // newest first, for the selected test type
+  let knownTags = []; // newest first (names only), for the selected test type
+  const tagSHAs = {}; // tag name -> commit SHA it points at (for Commit Hash auto-fill)
+  const commitHashInput = document.querySelector('input[name="commit_hash"]');
   let lastDiffKey = "";
   let statusKey = "diff_hint"; // which i18n key the status line currently shows, "" for custom text
 
@@ -199,7 +201,9 @@
       .then((r) => r.json())
       .then((tags) => {
         if (testTypeSelect.value !== requestedType) return; // user switched again meanwhile
-        knownTags = Array.isArray(tags) ? tags : [];
+        const arr = Array.isArray(tags) ? tags : [];
+        knownTags = arr.map((x) => (typeof x === "string" ? x : x.name));
+        arr.forEach((x) => { if (x && x.name) tagSHAs[x.name] = x.sha || ""; });
         const latest = latestTag(knownTags);
         fillSelect(tagSelect, knownTags, latest, t("tags_none", "No builds found"));
         onTagChange();
@@ -215,6 +219,10 @@
     const head = tagSelect ? tagSelect.value : "";
     if (!head) { resetDiff(); return; }
     fillBaseOptions(head);
+    // The selected build fully determines the commit; auto-fill Commit Hash
+    // with the tag's SHA (the field stays editable for manual overrides,
+    // it is simply overwritten on the next tag change).
+    if (commitHashInput && tagSHAs[head]) commitHashInput.value = tagSHAs[head];
     maybeLoadDiff(true);
   }
 
@@ -602,4 +610,49 @@
       })
       .catch((err) => console.error("failed to load engineer suggestions", err));
   }
+
+  // ---- Fetch Run ID from the test truck over SSH (local-only, see truck.go). ----
+  // Buttons only exist when the server rendered them (TRUCK_SSH_ENABLED or
+  // dry run). The vehicle comes from the Vehicle field if filled in; the
+  // server identifies the connected truck by hostname and fills it back.
+  document.querySelectorAll(".truck-fetch-btn").forEach((btn) => {
+    const field = document.querySelector('input[name="' + btn.dataset.field + '"]');
+    const notes = btn.dataset.notes
+      ? document.querySelector('input[name="notes_' + btn.dataset.notes + '"]')
+      : null;
+    const status = btn.parentNode.querySelector(".truck-status");
+    const vehicleInput = document.querySelector('input[name="vehicle"]');
+
+    function setStatus(text, cls) {
+      if (!status) return;
+      status.textContent = text || "";
+      status.hidden = !text;
+      // "muted small" always, so errors pick up .muted.small.error's red.
+      status.className = "truck-status muted small" + (cls && cls !== "muted" ? " " + cls : "");
+    }
+
+    btn.addEventListener("click", () => {
+      const vehicle = vehicleInput ? vehicleInput.value.trim() : "";
+      btn.disabled = true;
+      setStatus(t("truck_fetching", "Contacting the truck…"), "muted");
+      const q = vehicle ? "?vehicle=" + encodeURIComponent(vehicle) : "";
+      fetch("/api/truck/run_id" + q)
+        .then(async (r) => ({ ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) }))
+        .then(({ ok, status, data }) => {
+          if (!ok || !data.run_id) {
+            setStatus(t("truck_error", "Could not fetch:") + " " + (data.error || status), "error");
+            return;
+          }
+          if (field) field.value = data.run_id;
+          if (notes && data.path) notes.value = data.path;
+          if (vehicleInput && !vehicleInput.value.trim() && data.vehicle) vehicleInput.value = data.vehicle;
+          let msg = t("truck_fetched", "Fetched from") + " " + (data.hostname || "");
+          if (data.date) msg += " · " + data.date;
+          if (data.warning) msg += " — ⚠️ " + data.warning;
+          setStatus(msg, "muted");
+        })
+        .catch((err) => setStatus(t("truck_error", "Could not fetch:") + " " + err, "error"))
+        .finally(() => { btn.disabled = false; });
+    });
+  });
 })();

@@ -27,6 +27,31 @@ func TestTemplatesExecute(t *testing.T) {
 			t.Errorf("index template missing %q", want)
 		}
 	}
+	if strings.Contains(html, "truck-fetch-btn") {
+		t.Error("truck fetch buttons rendered although TruckSSH is off")
+	}
+
+	// TruckSSH on: all three Run ID fields get a fetch button, and the Run
+	// Info one is wired to also fill the logs_recording notes.
+	buf.Reset()
+	if err := pageTemplate.Execute(&buf, formData{
+		PreflightChecks: preflightChecks, EngagementChecks: engagementChecks, DisengagementChecks: disengagementChecks,
+		Today: "2026-09-02", GithubURL: githubURL, CurrentEngineer: "John Pham",
+		Vehicles: parseVehicleRange(defaultVehicleRange), TruckSSH: true, AssetVersion: assetVersion,
+	}); err != nil {
+		t.Fatalf("index template (TruckSSH): %v", err)
+	}
+	html = buf.String()
+	for _, want := range []string{
+		`truck-fetch-btn" data-field="run_id" data-notes="logs_recording"`,
+		`truck-fetch-btn" data-field="disengagement_run_id"`,
+		`truck-fetch-btn" data-field="closed_loop_run_id"`,
+		`data-i18n="commit_hash_hint"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("index template (TruckSSH) missing %q", want)
+		}
+	}
 
 	buf.Reset()
 	if err := confirmTemplate.Execute(&buf, struct {

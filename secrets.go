@@ -107,6 +107,16 @@ type config struct {
 	FeedbackTo string
 	ProjectID  string
 	URLBase    string
+
+	// Truck SSH (local-only, see truck.go). TruckSSHEnabled renders the
+	// "Fetch from truck" buttons and enables /api/truck/run_id. The app
+	// shells out to TruckSSHBin using the developer's own SSH keys/config;
+	// TruckSSHTarget is the truck's address and TruckLogRoot the root of the
+	// on-truck log tree.
+	TruckSSHEnabled bool
+	TruckSSHBin     string
+	TruckSSHTarget  string
+	TruckLogRoot    string
 }
 
 func loadConfig() config {
@@ -131,6 +141,11 @@ func loadConfig() config {
 		FeedbackTo: envOrDefault("FEEDBACK_TO", defaultFeedbackTo),
 		ProjectID:  os.Getenv("PROJECT_ID"),
 		URLBase:    os.Getenv("URL_BASE"),
+
+		TruckSSHEnabled: os.Getenv("TRUCK_SSH_ENABLED") == "true",
+		TruckSSHBin:     envOrDefault("TRUCK_SSH_BIN", "ssh"),
+		TruckSSHTarget:  envOrDefault("TRUCK_SSH_TARGET", "applied@192.168.1.11"),
+		TruckLogRoot:    envOrDefault("TRUCK_LOG_ROOT", "/media/hotswap1/frontier"),
 	}
 }
 
