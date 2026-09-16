@@ -227,6 +227,14 @@
   "check_engagement_pass": "1回目の試行でADが起動し、正しいインジケーター/アラートが表示され、車両への制御移行がスムーズに行われる。",
   "check_engagement_fail": "起動に失敗する、複数回の試行が必要、エラーが発生する、または制御移行が急激/危険である。",
 
+  "check_lichtblick_cameras_verify": "Lichtblickを開き、Sensors validationタブに移動して、すべてのカメラが正しく表示されていることを確認します。",
+  "check_lichtblick_cameras_pass": "すべてのカメラがライブで正しい向きの映像を表示し、フリーズ・黒いフレーム・映像の乱れがない。",
+  "check_lichtblick_cameras_fail": "カメラが黒い・フリーズしている・表示されない・向きがおかしい・映像の乱れがある。",
+
+  "check_health_monitor_nodes_verify": "ヘルスモニターGUIを開き、赤く表示されているノードがあるかどうかをメモします。",
+  "check_health_monitor_nodes_pass": "赤いノードなし — AD起動中、すべてのノードが正常/OKを示している。",
+  "check_health_monitor_nodes_fail": "1つ以上のノードが赤い — 該当するノードをメモ欄に記入してください。",
+
   "check_steering_left_verify": "ADが起動している状態で、ハンドルを左に十分な力で回してディスエンゲージを発生させます。",
   "check_steering_left_pass": "ADが正しいアラート/インジケーターとともに即座にディスエンゲージし、セーフティドライバーが完全な手動制御を得る。",
   "check_steering_left_fail": "ADがディスエンゲージしない、明らかな遅延を伴ってディスエンゲージする、または手動制御が完全に戻らない。",

@@ -227,6 +227,14 @@
   "check_engagement_pass": "AD engages on the first attempt, the correct indicators/alerts fire, and control transitions cleanly to the vehicle.",
   "check_engagement_fail": "Engagement fails, needs multiple attempts, throws an error, or the control transition is abrupt or unsafe.",
 
+  "check_lichtblick_cameras_verify": "Open Lichtblick, go to the Sensors validation tab, and confirm every camera is displaying properly.",
+  "check_lichtblick_cameras_pass": "All cameras show a live, correctly oriented image with no freezes, black frames, or visual artifacts.",
+  "check_lichtblick_cameras_fail": "Any camera is black, frozen, missing, rotated/misaligned, or showing artifacts.",
+
+  "check_health_monitor_nodes_verify": "Open the health monitor GUI and note down whether any nodes are shown red.",
+  "check_health_monitor_nodes_pass": "No red nodes — every node reports healthy/OK while AD is engaged.",
+  "check_health_monitor_nodes_fail": "One or more nodes are red; note down which nodes in the Notes field.",
+
   "check_steering_left_verify": "With AD engaged, turn the steering wheel left with enough force to trigger a disengagement.",
   "check_steering_left_pass": "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
   "check_steering_left_fail": "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored.",

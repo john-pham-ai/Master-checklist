@@ -116,6 +116,14 @@ var engagementChecks = []checkSpec{
 		"Engage autonomy mode using the standard procedure and observe the takeover.",
 		"AD engages on the first attempt, the correct indicators/alerts fire, and control transitions cleanly to the vehicle.",
 		"Engagement fails, needs multiple attempts, throws an error, or the control transition is abrupt or unsafe."},
+	{"lichtblick_cameras", "Lichtblick: cameras in the Sensors validation tab",
+		"Open Lichtblick, go to the Sensors validation tab, and confirm every camera is displaying properly.",
+		"All cameras show a live, correctly oriented image with no freezes, black frames, or visual artifacts.",
+		"Any camera is black, frozen, missing, rotated/misaligned, or showing artifacts."},
+	{"health_monitor_nodes", "Health monitor GUI: red nodes",
+		"Open the health monitor GUI and note down whether any nodes are shown red.",
+		"No red nodes — every node reports healthy/OK while AD is engaged.",
+		"One or more nodes are red; note down which nodes in the Notes field."},
 }
 
 var disengagementChecks = []checkSpec{
