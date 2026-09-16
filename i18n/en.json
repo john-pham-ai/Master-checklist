@@ -202,6 +202,7 @@
   "media_permission_error": "Could not start recording: ",
   "media_unsupported": "Not supported in this browser",
   "media_remove": "Remove",
+  "media_lost": "The browser lost the contents of: {list}. Remove the broken entries (they show as empty thumbnails) and re-add them, then submit again.",
 
   "check_syscheck_verify": "Run `run_syscheck` on the vehicle and review its output in the terminal or log.",
   "check_syscheck_pass": "All subsystems report OK/green with no errors or warnings flagged.",

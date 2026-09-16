@@ -5,6 +5,10 @@
 // via the DataTransfer trick right before the form submits. That keeps the
 // existing plain <form method=post enctype=multipart/form-data> submission
 // working unchanged — no fetch/XHR upload path to maintain separately.
+//
+// Incoming files are copied into app-owned in-memory Files (snapshotFile) and
+// re-checked right before submit (fileIsReadable), because a long-lived tab
+// can lose the bytes behind browser-owned File references (see snapshotFile).
 (function () {
   const t = (key, fallback) => (window.checklistI18n ? window.checklistI18n.t(key, fallback) : fallback);
 
@@ -79,12 +83,45 @@
     });
   }
 
-  function addFiles(container, key, kind, files) {
+  // A File handed over by a paste event or a file picker only *references*
+  // data owned by the browser (clipboard storage, the picked file on disk).
+  // In a tab left open for hours (overnight, laptop asleep) Chrome can drop
+  // that backing data, and the form then submits the filename with 0 bytes —
+  // which is exactly what produced empty attachments on a real run page.
+  // Copying the bytes into a fresh in-memory File right away makes the
+  // attachment independent of where it came from. Falls back to the original
+  // File if the read fails, so a paste never silently disappears.
+  async function snapshotFile(f) {
+    try {
+      const buf = await f.arrayBuffer();
+      if (buf.byteLength === 0 && f.size > 0) return f; // unreadable already; keep the original for the pre-submit check
+      return new File([buf], f.name, { type: f.type, lastModified: f.lastModified });
+    } catch (err) {
+      console.warn("could not snapshot attachment", f.name, err);
+      return f;
+    }
+  }
+
+  async function addFiles(container, key, kind, files) {
     const s = getState(key);
     const arr = kind === "image" ? s.shots : s.clips;
-    Array.from(files || []).forEach((f) => arr.push(f));
+    const snapshots = await Promise.all(Array.from(files || []).map(snapshotFile));
+    snapshots.forEach((f) => arr.push(f));
     renderList(container, key);
     syncInputs(container, key);
+  }
+
+  // Reads a File end to end and reports whether its bytes are still there.
+  // The size property alone is not enough: a File whose backing data is
+  // gone can still report its original size while the upload sends 0 bytes.
+  async function fileIsReadable(f) {
+    if (!f || f.size === 0) return false;
+    try {
+      const buf = await f.arrayBuffer();
+      return buf.byteLength === f.size;
+    } catch (err) {
+      return false;
+    }
   }
 
   function markActive(container) {
@@ -223,13 +260,57 @@
   // Belt-and-suspenders: hidden inputs are already re-synced on every
   // add/remove, but do it once more right before submit in case some future
   // code path mutates `state` without going through addFiles/renderList.
+  //
+  // Every attachment is also readability-checked first: a File can lose the
+  // bytes behind it while the tab stays open (see snapshotFile), and without
+  // this check the form would happily POST it as 0 bytes and the Confluence
+  // page would end up with empty attachment placeholders (a real incident:
+  // six 0-byte attachments on the 2026-09-16 run page). Blocking the submit
+  // with a message lets the tester re-capture instead of filing broken runs.
   const form = document.getElementById("checklist-form");
   if (form) {
-    form.addEventListener("submit", () => {
-      document.querySelectorAll(".check-media").forEach((container) => {
-        const key = container.getAttribute("data-check-key");
-        if (key) syncInputs(container, key);
-      });
+    let checking = false;
+    form.addEventListener("submit", async (e) => {
+      if (checking) return; // second pass: the check passed, let it through
+      e.preventDefault();
+      checking = true;
+      try {
+        let firstBad = null;
+        const bad = [];
+        const all = [];
+        document.querySelectorAll(".check-media").forEach((container) => {
+          const key = container.getAttribute("data-check-key");
+          if (key) {
+            syncInputs(container, key);
+            const s = getState(key);
+            s.shots.forEach((f) => all.push({ container, f }));
+            s.clips.forEach((f) => all.push({ container, f }));
+          }
+        });
+        for (const { container, f } of all) {
+          if (!(await fileIsReadable(f))) {
+            bad.push(f);
+            if (!firstBad) firstBad = { container, f };
+          }
+        }
+        if (bad.length) {
+          const list = bad.map((f) => f.name).join(", ");
+          const msg = t("media_lost", "The browser lost the contents of: {list}. Remove the broken entries (they show as empty thumbnails) and re-add them, then submit again.").replace("{list}", list);
+          setStatus(firstBad.container, msg, true);
+          if (firstBad) firstBad.container.scrollIntoView({ behavior: "smooth", block: "center" });
+          checking = false;
+          return;
+        }
+        // All files read back fine — submit for real. requestSubmit runs the
+        // same submit-event path; the guard above lets this second pass pass.
+        if (form.requestSubmit) form.requestSubmit();
+        else form.submit();
+      } catch (err) {
+        console.error("pre-submit attachment check failed", err);
+        // Never trap the tester in the form: submit anyway.
+        if (form.requestSubmit) form.requestSubmit();
+        else form.submit();
+      }
     });
   }
 })();

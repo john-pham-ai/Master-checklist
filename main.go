@@ -222,34 +222,55 @@ func attachmentFilename(checkKey, kind string, index int, originalName, fallback
 // collectMedia reads one media group's pasted screenshots
 // ("media_screenshot_<key>") and attached/recorded clips ("media_video_<key>")
 // from the parsed multipart form. It returns the attachment refs (named as
-// they will appear on the Confluence page) and the matching files to upload.
-func collectMedia(r *http.Request, key string) ([]confluence.MediaRef, []pendingUpload) {
-	var refs []confluence.MediaRef
-	var uploads []pendingUpload
+// they will appear on the Confluence page), the matching files to upload, and
+// the names of any parts that arrived with no content.
+//
+// Empty parts are skipped rather than attached: a browser can lose the bytes
+// behind a File in a long-lived tab (the media.js pre-submit check blocks
+// those client-side, but the server must not trust that) — attaching the name
+// anyway would put a broken 0-byte file on the Confluence page (a real
+// incident on the 2026-09-16 run page). The skipped names are surfaced on the
+// confirmation page so nothing disappears silently.
+func collectMedia(r *http.Request, key string) (refs []confluence.MediaRef, uploads []pendingUpload, empty []string) {
 	if r.MultipartForm != nil {
-		for i, fh := range r.MultipartForm.File["media_screenshot_"+key] {
-			name := attachmentFilename(key, "screenshot", i, fh.Filename, "png")
+		n := 0 // contiguous counter over the parts that are actually attached
+		for _, fh := range r.MultipartForm.File["media_screenshot_"+key] {
+			if fh.Size == 0 {
+				log.Printf("submit: skipping empty screenshot part %q (check %q)", fh.Filename, key)
+				empty = append(empty, fh.Filename)
+				continue
+			}
+			name := attachmentFilename(key, "screenshot", n, fh.Filename, "png")
 			refs = append(refs, confluence.MediaRef{Filename: name, Kind: "image"})
 			uploads = append(uploads, pendingUpload{PageFilename: name, Header: fh})
+			n++
 		}
-		for i, fh := range r.MultipartForm.File["media_video_"+key] {
-			name := attachmentFilename(key, "clip", i, fh.Filename, "webm")
+		n = 0
+		for _, fh := range r.MultipartForm.File["media_video_"+key] {
+			if fh.Size == 0 {
+				log.Printf("submit: skipping empty clip part %q (check %q)", fh.Filename, key)
+				empty = append(empty, fh.Filename)
+				continue
+			}
+			name := attachmentFilename(key, "clip", n, fh.Filename, "webm")
 			refs = append(refs, confluence.MediaRef{Filename: name, Kind: "video"})
 			uploads = append(uploads, pendingUpload{PageFilename: name, Header: fh})
+			n++
 		}
 	}
-	return refs, uploads
+	return refs, uploads, empty
 }
 
 // collectChecks reads each check's radio/notes fields plus its media (see
-// collectMedia) from the parsed multipart form. It returns the check results
-// and the matching list of files still to be uploaded.
-func collectChecks(r *http.Request, specs []checkSpec) ([]confluence.CheckResult, []pendingUpload) {
-	results := make([]confluence.CheckResult, 0, len(specs))
-	var uploads []pendingUpload
+// collectMedia) from the parsed multipart form. It returns the check results,
+// the matching list of files still to be uploaded, and the names of any media
+// parts that arrived empty (skipped; see collectMedia).
+func collectChecks(r *http.Request, specs []checkSpec) (results []confluence.CheckResult, uploads []pendingUpload, empty []string) {
+	results = make([]confluence.CheckResult, 0, len(specs))
 	for _, spec := range specs {
-		media, mediaUploads := collectMedia(r, spec.Key)
+		media, mediaUploads, emptyMedia := collectMedia(r, spec.Key)
 		uploads = append(uploads, mediaUploads...)
+		empty = append(empty, emptyMedia...)
 		results = append(results, confluence.CheckResult{
 			Key:    spec.Key,
 			Label:  spec.Label,
@@ -258,7 +279,7 @@ func collectChecks(r *http.Request, specs []checkSpec) ([]confluence.CheckResult
 			Media:  media,
 		})
 	}
-	return results, uploads
+	return results, uploads, empty
 }
 
 // uploadPendingMedia attaches every pending screenshot/clip to the just-created
@@ -302,15 +323,17 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 		testType := r.FormValue("test_type")
 		isCandidate := testType == "candidate"
 
-		preflightResults, preflightUploads := collectChecks(r, preflightChecks)
-		engagementResults, engagementUploads := collectChecks(r, engagementChecks)
-		disengagementResults, disengagementUploads := collectChecks(r, disengagementChecks)
+		preflightResults, preflightUploads, emptyPreflight := collectChecks(r, preflightChecks)
+		engagementResults, engagementUploads, emptyEngagement := collectChecks(r, engagementChecks)
+		disengagementResults, disengagementUploads, emptyDisengagement := collectChecks(r, disengagementChecks)
 		pendingMedia := append(append(preflightUploads, engagementUploads...), disengagementUploads...)
+		emptyUploads := append(append(emptyPreflight, emptyEngagement...), emptyDisengagement...)
 
 		// Photos pasted into the "Notes on the changes" section ride along
 		// as the "notes" media group (no check uses that key).
-		notesMedia, notesUploads := collectMedia(r, "notes")
+		notesMedia, notesUploads, emptyNotes := collectMedia(r, "notes")
 		pendingMedia = append(pendingMedia, notesUploads...)
+		emptyUploads = append(emptyUploads, emptyNotes...)
 
 		report := confluence.RunReport{
 			Tag:           r.FormValue("tag"),
@@ -335,8 +358,9 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 		// The Closed Loop section only exists on the form when the tester
 		// ticked the toggle, so its fields are only collected then.
 		if r.FormValue("closed_loop") != "" {
-			closedLoopResults, closedLoopUploads := collectChecks(r, closedLoopChecks)
+			closedLoopResults, closedLoopUploads, emptyClosedLoop := collectChecks(r, closedLoopChecks)
 			pendingMedia = append(pendingMedia, closedLoopUploads...)
+			emptyUploads = append(emptyUploads, emptyClosedLoop...)
 			report.ClosedLoop = confluence.ClosedLoop{
 				Enabled:   true,
 				RunID:     r.FormValue("closed_loop_run_id"),
@@ -420,7 +444,8 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			ShowGatekeeper bool
 			AssetVersion   string
 			FailedUploads  []string
-		}{PageURL: pageURL, GatekeeperURL: gatekeeperURL, ShowGatekeeper: !isCandidate, AssetVersion: assetVersion, FailedUploads: failedUploads}); err != nil {
+			EmptyUploads   []string
+		}{PageURL: pageURL, GatekeeperURL: gatekeeperURL, ShowGatekeeper: !isCandidate, AssetVersion: assetVersion, FailedUploads: failedUploads, EmptyUploads: emptyUploads}); err != nil {
 			log.Printf("confirm template execute error: %v", err)
 		}
 	}

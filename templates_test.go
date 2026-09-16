@@ -58,11 +58,18 @@ func TestTemplatesExecute(t *testing.T) {
 		ShowGatekeeper bool
 		AssetVersion   string
 		FailedUploads  []string
-	}{PageURL: "https://x/page", GatekeeperURL: gatekeeperURL, ShowGatekeeper: true, AssetVersion: assetVersion}); err != nil {
+		EmptyUploads   []string
+	}{PageURL: "https://x/page", GatekeeperURL: gatekeeperURL, ShowGatekeeper: true, AssetVersion: assetVersion, FailedUploads: []string{"syscheck-clip-1.webm"}, EmptyUploads: []string{"broken.png"}}); err != nil {
 		t.Fatalf("confirm template: %v", err)
 	}
-	if !strings.Contains(buf.String(), `app.js?v=`+assetVersion) || !strings.Contains(buf.String(), "https://x/page") {
-		t.Errorf("confirm template output unexpected:\n%s", buf.String())
+	confirmHTML := buf.String()
+	if !strings.Contains(confirmHTML, `app.js?v=`+assetVersion) || !strings.Contains(confirmHTML, "https://x/page") {
+		t.Errorf("confirm template output unexpected:\n%s", confirmHTML)
+	}
+	for _, want := range []string{"syscheck-clip-1.webm", "broken.png", "arrived with no content"} {
+		if !strings.Contains(confirmHTML, want) {
+			t.Errorf("confirm template missing %q (upload warnings)", want)
+		}
 	}
 
 	buf.Reset()
