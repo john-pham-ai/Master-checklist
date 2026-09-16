@@ -3,6 +3,7 @@ package confluence
 import (
 	"fmt"
 	"html"
+	"regexp"
 	"strings"
 )
 
@@ -207,7 +208,13 @@ type ClosedLoop struct {
 	Maneuvers string // maneuvers tested in the closed loop run
 	Route     string // route used for the closed loop run
 	Recording string // Google Drive link to the closed loop recording
-	Checks    []CheckResult
+
+	// Master-only GO approval: the Slack permalink of the approval message
+	// and the message text itself (pasted or fetched from Slack on the form).
+	ApprovalLink    string
+	ApprovalMessage string
+
+	Checks []CheckResult
 }
 
 // RunReport holds everything submitted from the form for one smoke test run.
@@ -237,6 +244,43 @@ type RunReport struct {
 
 func esc(s string) string {
 	return html.EscapeString(s)
+}
+
+// slackMrkdwnLinkRE matches Slack mrkdwn links, both the labelled form
+// <https://…|label> and the bare autolink form <https://…>.
+var slackMrkdwnLinkRE = regexp.MustCompile(`<((?:https?|mailto):[^<>|]+?)(?:\|([^<>]*))?>`)
+
+// slackBoldRE matches *bold* spans (Slack mrkdwn). It is applied to already
+// HTML-escaped text; the asterisk is not an escaped character, so this is safe.
+var slackBoldRE = regexp.MustCompile(`\*([^*\n]+)\*`)
+
+// slackSegment renders one plain-text stretch of a pasted Slack message:
+// escaped, *bold* converted, and line breaks preserved. Slack messages also
+// keep their own leading indentation (bullet "•" lines), which is kept as-is.
+func slackSegment(s string) string {
+	return strings.ReplaceAll(slackBoldRE.ReplaceAllString(esc(s), "<strong>$1</strong>"), "\n", "<br/>\n")
+}
+
+// slackToHTML renders a pasted Slack message as safe Confluence storage
+// format. Everything is HTML-escaped first; Slack mrkdwn links become real
+// links and mrkdwn bold becomes <strong>. Unknown markup (emoji :names:,
+// mentions, code spans) is kept as escaped text, which is faithful to the
+// original message.
+func slackToHTML(s string) string {
+	var b strings.Builder
+	last := 0
+	for _, m := range slackMrkdwnLinkRE.FindAllStringSubmatchIndex(s, -1) {
+		b.WriteString(slackSegment(s[last:m[0]]))
+		url := s[m[2]:m[3]]
+		label := url
+		if m[4] >= 0 && strings.TrimSpace(s[m[4]:m[5]]) != "" {
+			label = strings.TrimSpace(s[m[4]:m[5]])
+		}
+		fmt.Fprintf(&b, "<a href=\"%s\">%s</a>", esc(url), slackSegment(label))
+		last = m[1]
+	}
+	b.WriteString(slackSegment(s[last:]))
+	return b.String()
 }
 
 func resultBadge(result string) string {
@@ -670,7 +714,15 @@ func renderClosedLoop(b *strings.Builder, cl ClosedLoop) {
 	} else {
 		b.WriteString("<tr><th>Recording</th><td></td></tr>\n")
 	}
+	// The GO approval is a master-only concept: its rows only appear when
+	// the tester actually provided them (candidate submissions never do).
+	if cl.ApprovalLink != "" {
+		fmt.Fprintf(b, "<tr><th>GO Approval (Slack)</th><td><a href=\"%s\">%s</a></td></tr>\n", esc(cl.ApprovalLink), esc(cl.ApprovalLink))
+	}
 	b.WriteString("</tbody></table>\n")
+	if cl.ApprovalMessage != "" {
+		b.WriteString("<p><strong>GO approval message</strong></p>\n<blockquote>" + slackToHTML(cl.ApprovalMessage) + "</blockquote>\n")
+	}
 	if len(cl.Checks) > 0 {
 		b.WriteString("<table><thead><tr><th>Check</th><th>Result</th><th>Notes</th><th>Attachments</th></tr></thead><tbody>\n")
 		for _, item := range cl.Checks {

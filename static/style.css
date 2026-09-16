@@ -210,6 +210,17 @@ textarea {
 .diff-flag-inline { color: var(--fail); font-size: 0.85rem; }
 .muted.small.error { color: var(--fail); }
 
+/* ---- Master closed loop GO approval (sub-section of the Closed Loop card,
+   shown only for Master Testing with the Closed Loop toggle on) ---- */
+.approval-subsection { margin-top: 1rem; padding-top: 0.8rem; border-top: 1px dashed var(--border); }
+.approval-subsection h3 { margin: 0 0 0.3rem; font-size: 0.95rem; color: var(--text); }
+.approval-subsection > p { margin: 0 0 0.8rem; }
+.approval-link-row { display: flex; gap: 0.5rem; }
+.approval-link-row input { flex: 1; min-width: 0; }
+.approval-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.approval-subsection label.stack { margin: 0.9rem 0 0; }
+.approval-subsection [hidden] { display: none; }
+
 footer {
   text-align: center;
   padding: 1.5rem;

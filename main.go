@@ -337,6 +337,13 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 				Recording: r.FormValue("closed_loop_recording"),
 				Checks:    closedLoopResults,
 			}
+			// The GO approval sub-section is only rendered for Master
+			// Testing; the browser disables (and never posts) its fields
+			// otherwise, and the server double-checks here.
+			if !isCandidate {
+				report.ClosedLoop.ApprovalLink = r.FormValue("closed_loop_approval_link")
+				report.ClosedLoop.ApprovalMessage = r.FormValue("closed_loop_approval_message")
+			}
 		}
 
 		// The browser posts back the diff summary it rendered (JSON produced by
@@ -600,6 +607,7 @@ func main() {
 	mux.HandleFunc("/api/truck/ssh_setup", makeTruckSSHSetupHandler(cfg))
 	mux.HandleFunc("/api/truck/ssh_lookup", makeTruckIPLookupHandler(cfg))
 	mux.HandleFunc("/api/engineers", makeEngineersHandler(newEngineerSource(cfg.EngineerGroups, cfg.DryRun)))
+	mux.HandleFunc("/api/slack/message", makeSlackMessageHandler(cfg))
 
 	feedback := &feedbackService{cfg: cfg, data: newDataAPI(), tr: tr}
 	mux.HandleFunc("/feedback", feedback.handleForm)

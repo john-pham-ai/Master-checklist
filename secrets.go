@@ -93,6 +93,11 @@ type config struct {
 	GithubRepo  string
 	GithubToken *tokenSource
 
+	// SlackToken is the (optional) Slack bot token used by
+	// /api/slack/message to fetch a GO approval message from a permalink
+	// (needs read scope on the master smoke test channel, see slack.go).
+	SlackToken *tokenSource
+
 	// EngineerGroups is the comma-separated list of Google/Okta groups whose
 	// members are suggested in the Test Engineer field.
 	EngineerGroups string
@@ -141,6 +146,8 @@ func loadConfig() config {
 		GithubOwner: envOrDefault("GITHUB_TAG_REPO_OWNER", "Ext-Applied-Frontier"),
 		GithubRepo:  envOrDefault("GITHUB_TAG_REPO_NAME", "brain2"),
 		GithubToken: newTokenSource("github-token", "GITHUB_TOKEN", dryRun),
+
+		SlackToken: newTokenSource("slack-bot-token", "SLACK_BOT_TOKEN", dryRun),
 
 		EngineerGroups: envOrDefault("ENGINEER_GROUPS", defaultEngineerGroups),
 		VehicleRange:   envOrDefault("VEHICLE_RANGE", defaultVehicleRange),

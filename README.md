@@ -30,6 +30,15 @@ header.
   (Google Drive link). Its contents land in a "Closed Loop" block on the
   Confluence page only when the checkbox was ticked; passes without it are
   unchanged.
+- **Master Closed Loop GO Approval (Slack)** (optional, Master Testing only): when
+  both Master Testing is selected *and* the Closed Loop checkbox is ticked, a GO
+  approval sub-section appears inside the Closed Loop card. Paste the permalink of
+  the approval message (the "Recommended decision: GO" reply in the
+  [master smoke test Slack channel](https://grid-appliedint.enterprise.slack.com/archives/C0B1L8F6NUX));
+  **Copy link** puts it on the clipboard, and **⬇️ Fetch message from Slack**
+  pulls the message text into the form (requires the `slack-bot-token` secret —
+  see below; without it, paste the message manually). Both the link and the
+  message are rendered on the Confluence page.
 
 ## Commit Hash auto-fill
 
@@ -305,10 +314,11 @@ CONFLUENCE_TOKEN="<atlassian-api-token>" GITHUB_TOKEN="<github-pat>" go run .
 | `PROJECT_ID`, `URL_BASE` | injected by apps-platform | Used for Vertex AI and the Data API base URL (`https://dataapi.$URL_BASE`) |
 | `CONFLUENCE_TOKEN` | — | Local dev only: use this Atlassian API token instead of Secret Manager |
 | `GITHUB_TOKEN` | — | Local dev only: use this GitHub PAT instead of Secret Manager |
+| `SLACK_BOT_TOKEN` | — | Local dev only: use this Slack bot token (xoxb/xoxc…) instead of Secret Manager |
 
 ## Secrets & deploy (apps-platform)
 
-`project.toml` has `enable_secrets = true`. Upload the two tokens once per environment:
+`project.toml` has `enable_secrets = true`. Upload the tokens once per environment:
 
 - `confluence-token` — an **Atlassian API token** created by the `CONFLUENCE_BOT_EMAIL`
   account at https://id.atlassian.com/manage-profile/security/api-tokens (starts with
@@ -319,16 +329,24 @@ CONFLUENCE_TOKEN="<atlassian-api-token>" GITHUB_TOKEN="<github-pat>" go run .
   fine-grained PAT the **resource owner must be the `Ext-Applied-Frontier` org** with
   `brain2` selected and `Contents: Read`; a personal-owner PAT sees the org but gets
   404 on the repo. A classic PAT needs the `repo` scope and SSO authorization for the org.
+- `slack-bot-token` *(optional)* — a Slack bot token with **read-only** access
+  (`conversations.history` / `conversations.replies` scopes), used only by the Master
+  Closed Loop GO approval **⬇️ Fetch message from Slack** button. Without this secret
+  the button reports that fetching is unavailable and the tester pastes the approval
+  message manually; everything else works. The bot must be a member of the master
+  smoke test channel for `conversations.*` to see its messages.
 
 ```sh
 # staging (default profile)
 apps-platform app secret set confluence-token "<atlassian-api-token>"
 apps-platform app secret set github-token "<github-pat>"
+apps-platform app secret set slack-bot-token "<xoxb/xoxc…>"   # optional
 apps-platform app deploy
 
 # prod
 apps-platform app --environment experimental-prod secret set confluence-token "<atlassian-api-token>"
 apps-platform app --environment experimental-prod secret set github-token "<github-pat>"
+apps-platform app --environment experimental-prod secret set slack-bot-token "<xoxb/xoxc…>"   # optional
 apps-platform app --environment experimental-prod deploy
 ```
 

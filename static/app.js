@@ -584,13 +584,113 @@
   // rows) can't block submission, and nothing is posted for a hidden section.
   const closedLoopToggle = document.getElementById("closed-loop-toggle");
   const closedLoopCard = document.getElementById("closed-loop-card");
+  const approvalSection = document.getElementById("closed-loop-approval");
   if (closedLoopToggle && closedLoopCard) {
     const applyClosedLoop = () => {
       closedLoopCard.hidden = !closedLoopToggle.checked;
       closedLoopCard.querySelectorAll("input, select, textarea").forEach((f) => { f.disabled = !closedLoopToggle.checked; });
+      applyMasterApproval();
     };
+    // The GO approval sub-section only exists for Master closed loop runs:
+    // it needs both the Closed Loop toggle AND "Master Testing" selected.
+    // applyClosedLoop above (re)enables every field in the card, so this
+    // re-disables and hides the approval fields when they don't apply.
+    function applyMasterApproval() {
+      if (!approvalSection) return;
+      const show = closedLoopToggle.checked && testTypeSelect && testTypeSelect.value === "master";
+      approvalSection.hidden = !show;
+      approvalSection.querySelectorAll("input, textarea, button").forEach((f) => { f.disabled = !show; });
+    }
     closedLoopToggle.addEventListener("change", applyClosedLoop);
+    if (testTypeSelect) testTypeSelect.addEventListener("change", applyMasterApproval);
     applyClosedLoop();
+  }
+
+  // ---- Master closed loop GO approval: copy the Slack permalink, and
+  // optionally fetch the approval message text from Slack (see slack.go).
+  // Both buttons live in the approval sub-section, so they only exist when
+  // the section was rendered.
+  if (approvalSection) {
+    const approvalLinkInput = document.getElementById("closed-loop-approval-link");
+    const approvalMessage = document.getElementById("closed-loop-approval-message");
+    const copyBtn = document.getElementById("copy-approval-link-btn");
+    const copyStatus = document.getElementById("approval-copy-status");
+    const fetchBtn = document.getElementById("fetch-approval-message-btn");
+    const fetchStatus = document.getElementById("approval-fetch-status");
+
+    const setStatus = (el, text, cls) => {
+      if (!el) return;
+      el.textContent = text || "";
+      el.hidden = !text;
+      el.className = "muted small" + (cls === "error" ? " error" : "");
+    };
+
+    const copyText = async (text) => {
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch (err) {
+          console.warn("clipboard API failed, falling back to execCommand", err);
+        }
+      }
+      // Fallback for non-secure contexts (e.g. a local http:// run) where
+      // navigator.clipboard is unavailable or blocked.
+      try {
+        const ta = el("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        ta.remove();
+        return ok;
+      } catch (err) {
+        console.warn("execCommand copy failed", err);
+        return false;
+      }
+    };
+
+    if (copyBtn && approvalLinkInput) {
+      copyBtn.addEventListener("click", async () => {
+        const link = approvalLinkInput.value.trim();
+        if (!link) {
+          setStatus(copyStatus, t("approval_copy_need_link", "Paste a Slack message link first."), "error");
+          return;
+        }
+        const ok = await copyText(link);
+        if (ok) {
+          setStatus(copyStatus, t("approval_copied", "Link copied!"), null);
+        } else {
+          setStatus(copyStatus, t("approval_copy_failed", "Could not copy — select the link text and copy it manually."), "error");
+        }
+      });
+    }
+
+    if (fetchBtn && approvalLinkInput && approvalMessage) {
+      fetchBtn.addEventListener("click", () => {
+        const link = approvalLinkInput.value.trim();
+        if (!link) {
+          setStatus(fetchStatus, t("approval_fetch_need_link", "Paste a Slack message link first."), "error");
+          return;
+        }
+        fetchBtn.disabled = true;
+        setStatus(fetchStatus, t("approval_fetching", "Fetching from Slack…"), null);
+        fetch("/api/slack/message?link=" + encodeURIComponent(link))
+          .then(async (r) => ({ ok: r.ok, status: r.status, data: await r.json().catch(() => ({})) }))
+          .then(({ ok, status, data }) => {
+            if (ok && data.text) {
+              approvalMessage.value = data.text;
+              setStatus(fetchStatus, t("approval_fetched", "Message fetched from Slack."), null);
+            } else {
+              setStatus(fetchStatus, t("approval_fetch_failed", "Could not fetch automatically — paste the message below."), "error");
+            }
+          })
+          .catch(() => setStatus(fetchStatus, t("approval_fetch_failed", "Could not fetch automatically — paste the message below."), "error"))
+          .finally(() => { fetchBtn.disabled = false; });
+      });
+    }
   }
 
   // ---- Test Engineer suggestions: members of the access groups (see engineers.go). ----

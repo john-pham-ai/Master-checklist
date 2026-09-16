@@ -36,6 +36,12 @@ func TestTemplatesExecute(t *testing.T) {
 		`id="truck-setup-btn"`, `id="truck-setup-vehicle"`, `id="truck-setup-remote-ip"`,
 		`id="truck-remote-hint"`,
 		`data-i18n="truck_setup_remote_ip"`,
+		// The Master closed loop GO approval sub-section lives inside the
+		// Closed Loop card; hidden by default, shown by app.js for Master.
+		`id="closed-loop-approval"`, `id="closed-loop-approval-link"`,
+		`name="closed_loop_approval_link"`, `name="closed_loop_approval_message"`,
+		`id="copy-approval-link-btn"`, `id="fetch-approval-message-btn"`,
+		`data-i18n="section_closed_loop_approval"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("index template missing %q", want)

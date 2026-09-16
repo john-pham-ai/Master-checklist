@@ -205,6 +205,29 @@
         <input type="url" name="closed_loop_recording" placeholder="https://drive.google.com/...">
       </label>
     </div>
+    <div id="closed-loop-approval" class="approval-subsection" hidden>
+      <h3 data-i18n="section_closed_loop_approval">Master Closed Loop GO Approval (Slack)</h3>
+      <p class="muted small" data-i18n="closed_loop_approval_intro">A GO decision posted in the master smoke test Slack channel is required before master closed loop testing. Paste the approval message's permalink here — both the link and the message are included on the Confluence page.</p>
+      <div class="grid">
+        <label>
+          <span data-i18n="field_closed_loop_approval_link">GO approval message link</span>
+          <a href="https://grid-appliedint.enterprise.slack.com/archives/C0B1L8F6NUX" target="_blank" rel="noopener" class="field-hint" data-i18n="closed_loop_approval_channel_hint">Master smoke test Slack channel</a>
+          <span class="approval-link-row">
+            <input type="url" name="closed_loop_approval_link" id="closed-loop-approval-link" placeholder="https://…/archives/…">
+            <button type="button" class="btn-link" id="copy-approval-link-btn" data-i18n="approval_copy_link">Copy link</button>
+          </span>
+          <span class="truck-status muted small" id="approval-copy-status" hidden></span>
+        </label>
+      </div>
+      <label class="stack">
+        <span data-i18n="field_closed_loop_approval_message">GO approval message</span>
+        <span class="approval-actions">
+          <button type="button" class="btn-link" id="fetch-approval-message-btn" data-i18n="approval_fetch_message">⬇️ Fetch message from Slack</button>
+          <span class="truck-status muted small" id="approval-fetch-status" hidden></span>
+        </span>
+        <textarea name="closed_loop_approval_message" id="closed-loop-approval-message" rows="6" data-i18n-placeholder="approval_message_placeholder" placeholder="Recommended decision: GO …"></textarea>
+      </label>
+    </div>
     {{range .ClosedLoopChecks}}{{template "check_item" .}}{{end}}
   </section>
 
