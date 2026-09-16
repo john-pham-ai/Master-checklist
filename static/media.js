@@ -14,6 +14,7 @@
 
   const state = new Map(); // checkKey -> { shots: File[], clips: File[] }
   const recorders = new Map(); // "checkKey:kind" -> MediaRecorder
+  const broken = new Set(); // Files whose contents the browser lost (shown with a Replace button)
   let activeContainer = null; // last .check-media the user interacted with; paste targets this one
 
   function getState(key) {
@@ -74,10 +75,24 @@
         const arr = kind === "image" ? s.shots : s.clips;
         const i = arr.indexOf(f);
         if (i !== -1) arr.splice(i, 1);
+        broken.delete(f);
         renderList(container, key);
         syncInputs(container, key);
       });
       item.appendChild(remove);
+
+      // A File flagged by the pre-submit readability check gets a Replace
+      // button: its bytes are gone for good, so re-attaching in place is the
+      // tester's chance to retry before submitting again.
+      if (broken.has(f)) {
+        item.classList.add("media-item-broken");
+        const replaceBtn = document.createElement("button");
+        replaceBtn.type = "button";
+        replaceBtn.className = "media-replace";
+        replaceBtn.textContent = "🔁 " + t("media_replace", "Replace");
+        replaceBtn.addEventListener("click", () => replaceFile(container, key, kind, f));
+        item.appendChild(replaceBtn);
+      }
 
       list.appendChild(item);
     });
@@ -126,6 +141,28 @@
 
   function markActive(container) {
     activeContainer = container;
+  }
+
+  // Replaces one broken attachment in place: a throwaway file picker (never
+  // part of the form, so it can't disturb the shared inputs) whose pick is
+  // snapshotted into the same slot the lost file occupied.
+  function replaceFile(container, key, kind, oldFile) {
+    const picker = document.createElement("input");
+    picker.type = "file";
+    picker.accept = kind === "image" ? "image/*" : "video/*";
+    picker.addEventListener("change", async () => {
+      const picked = picker.files && picker.files[0];
+      if (!picked) return;
+      const s = getState(key);
+      const arr = kind === "image" ? s.shots : s.clips;
+      const i = arr.indexOf(oldFile);
+      if (i === -1) return; // removed meanwhile; nothing to replace
+      arr[i] = await snapshotFile(picked);
+      broken.delete(oldFile);
+      renderList(container, key);
+      syncInputs(container, key);
+    });
+    picker.click();
   }
 
   // A short clip recorded live doesn't come with a filename, so name it after
@@ -265,8 +302,8 @@
   // bytes behind it while the tab stays open (see snapshotFile), and without
   // this check the form would happily POST it as 0 bytes and the Confluence
   // page would end up with empty attachment placeholders (a real incident:
-  // six 0-byte attachments on the 2026-09-16 run page). Blocking the submit
-  // with a message lets the tester re-capture instead of filing broken runs.
+  // six 0-byte attachments on the 2026-09-16 run page). Broken files get a
+  // Replace button in place — the tester retries, then submits again.
   const form = document.getElementById("checklist-form");
   if (form) {
     let checking = false;
@@ -294,13 +331,20 @@
           }
         }
         if (bad.length) {
-          const list = bad.map((f) => f.name).join(", ");
-          const msg = t("media_lost", "The browser lost the contents of: {list}. Remove the broken entries (they show as empty thumbnails) and re-add them, then submit again.").replace("{list}", list);
+          bad.forEach((f) => broken.add(f));
+          // Re-render so each lost file shows red with its Replace button.
+          const containers = new Set(bad.map((f) => {
+            const hit = all.find((x) => x.f === f);
+            return hit ? hit.container : null;
+          }));
+          containers.forEach((c) => { if (c) renderList(c, c.getAttribute("data-check-key")); });
+          const msg = t("media_lost", "The browser lost the contents of {n} attachment(s) — they're marked red below. Click Replace on each to re-add it, then submit again.").replace("{n}", String(bad.length));
           setStatus(firstBad.container, msg, true);
           if (firstBad) firstBad.container.scrollIntoView({ behavior: "smooth", block: "center" });
           checking = false;
           return;
         }
+        broken.clear();
         // All files read back fine — submit for real. requestSubmit runs the
         // same submit-event path; the guard above lets this second pass pass.
         if (form.requestSubmit) form.requestSubmit();

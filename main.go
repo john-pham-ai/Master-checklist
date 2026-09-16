@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"html/template"
+	"io"
 	"io/fs"
 	"log"
 	"mime/multipart"
@@ -340,8 +341,7 @@ func collectChecks(r *http.Request, specs []checkSpec) (results []confluence.Che
 // page. Uploads happen after the page (and its body's media macros) already
 // exist, so a failed upload never blocks the run page itself — it's logged
 // and surfaced as a warning on the confirmation screen instead.
-func uploadPendingMedia(client *confluence.Client, pageID string, uploads []pendingUpload) []string {
-	var warnings []string
+func uploadPendingMedia(client *confluence.Client, pageID string, uploads []pendingUpload) (warnings []string, retryFiles []retryFile) {
 	for _, u := range uploads {
 		f, err := u.Header.Open()
 		if err != nil {
@@ -355,12 +355,27 @@ func uploadPendingMedia(client *confluence.Client, pageID string, uploads []pend
 		if err != nil {
 			log.Printf("failed to upload attachment %q: %v", u.PageFilename, err)
 			warnings = append(warnings, u.PageFilename)
+			// Hold the file for the confirmation page's Retry button (see
+			// retry.go): the multipart temp files are gone once the request
+			// ends, so this is the last chance to keep the bytes. A single
+			// file larger than the whole store budget isn't retried.
+			if u.Header.Size <= maxRetryBytes {
+				if f2, rerr := u.Header.Open(); rerr == nil {
+					data, _ := io.ReadAll(f2)
+					f2.Close()
+					retryFiles = append(retryFiles, retryFile{
+						PageFilename: u.PageFilename,
+						ContentType:  contentType,
+						Data:         data,
+					})
+				}
+			}
 		}
 	}
-	return warnings
+	return warnings, retryFiles
 }
 
-func makeSubmitHandler(cfg config) http.HandlerFunc {
+func makeSubmitHandler(cfg config, retries *retryStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -488,8 +503,16 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 		// The page already renders (with placeholder media macros) before its
 		// screenshots/clips exist as attachments, so an upload failure here is
 		// only a warning, never a reason to fail a submission that otherwise
-		// succeeded — it's shown on the confirmation screen instead.
-		failedUploads := uploadPendingMedia(client, pageID, pendingMedia)
+		// succeeded — it's shown on the confirmation screen instead, with a
+		// Retry button when the failed files were small enough to hold.
+		failedUploads, retryFiles := uploadPendingMedia(client, pageID, pendingMedia)
+		retryID := ""
+		if len(retryFiles) > 0 {
+			retryID = newRetryID()
+			if !retries.put(retryID, pageID, retryFiles) {
+				retryID = "" // too big to hold — confirmation falls back to manual
+			}
+		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := confirmTemplate.Execute(w, struct {
@@ -499,7 +522,8 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			AssetVersion   string
 			FailedUploads  []string
 			EmptyUploads   []string
-		}{PageURL: pageURL, GatekeeperURL: gatekeeperURL, ShowGatekeeper: !isCandidate, AssetVersion: assetVersion, FailedUploads: failedUploads, EmptyUploads: emptyUploads}); err != nil {
+			RetryID        string
+		}{PageURL: pageURL, GatekeeperURL: gatekeeperURL, ShowGatekeeper: !isCandidate, AssetVersion: assetVersion, FailedUploads: failedUploads, EmptyUploads: emptyUploads, RetryID: retryID}); err != nil {
 			log.Printf("confirm template execute error: %v", err)
 		}
 	}
@@ -684,10 +708,11 @@ func main() {
 
 	tags := &tagCache{cfg: cfg}
 	tr := newTranslator(cfg.ProjectID, cfg.DryRun)
+	retries := newRetryStore()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", makeIndexHandler(parseVehicleRange(cfg.VehicleRange)))
-	mux.HandleFunc("/submit", makeSubmitHandler(cfg))
+	mux.HandleFunc("/submit", makeSubmitHandler(cfg, retries))
 	mux.HandleFunc("/api/tags", makeTagsHandler(tags))
 	mux.HandleFunc("/api/diff", newDiffService(cfg, tags, tr).handle)
 	mux.HandleFunc("/api/truck/run_id", makeTruckRunIDHandler(cfg))
@@ -695,6 +720,7 @@ func main() {
 	mux.HandleFunc("/api/truck/ssh_lookup", makeTruckIPLookupHandler(cfg))
 	mux.HandleFunc("/api/engineers", makeEngineersHandler(newEngineerSource(cfg.EngineerGroups, cfg.DryRun)))
 	mux.HandleFunc("/api/slack/message", makeSlackMessageHandler(cfg))
+	mux.HandleFunc("/api/retry_uploads", makeRetryUploadsHandler(cfg, retries))
 
 	feedback := &feedbackService{cfg: cfg, data: newDataAPI(), tr: tr}
 	mux.HandleFunc("/feedback", feedback.handleForm)

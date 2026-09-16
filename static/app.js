@@ -915,4 +915,55 @@
         .finally(() => { btn.disabled = false; });
     });
   });
+
+  // ---- Confirmation page: retry attachments whose Confluence upload failed.
+  // The server holds the failed files for a short window (see retry.go); the
+  // button re-uploads them so the tester doesn't have to edit the page by hand.
+  const retryBtn = document.getElementById("retry-uploads-btn");
+  if (retryBtn) {
+    const retryStatus = document.getElementById("retry-uploads-status");
+    const warning = document.getElementById("failed-uploads-warning");
+    retryBtn.addEventListener("click", () => {
+      retryBtn.disabled = true;
+      if (retryStatus) {
+        retryStatus.hidden = false;
+        retryStatus.className = "muted small";
+        retryStatus.textContent = t("confirm_retrying", "Retrying…");
+      }
+      fetch("/api/retry_uploads?id=" + encodeURIComponent(retryBtn.dataset.retryId), { method: "POST" })
+        .then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) }))
+        .then(({ ok, data }) => {
+          if (!ok || data.unavailable) {
+            if (retryStatus) {
+              retryStatus.className = "muted small error";
+              retryStatus.textContent = t("confirm_retry_unavailable", "The files are no longer held for retry (the instance restarted or they expired) — please attach them to the page manually.");
+            }
+            retryBtn.hidden = true;
+            return;
+          }
+          if (data.ok) {
+            if (warning) warning.hidden = true;
+            if (retryStatus) {
+              retryStatus.className = "muted small";
+              retryStatus.textContent = "✅ " + t("confirm_retry_ok", "All attachments uploaded.");
+            }
+            retryBtn.hidden = true;
+            return;
+          }
+          const list = (data.failed || []).join(", ");
+          if (retryStatus) {
+            retryStatus.className = "muted small error";
+            retryStatus.textContent = t("confirm_retry_partial", "Some still failed: {list}. Try again in a moment, or attach them to the page manually.").replace("{list}", list);
+          }
+          retryBtn.disabled = false;
+        })
+        .catch(() => {
+          if (retryStatus) {
+            retryStatus.className = "muted small error";
+            retryStatus.textContent = t("confirm_retry_partial", "Some still failed: {list}. Try again in a moment, or attach them to the page manually.").replace("{list}", "");
+          }
+          retryBtn.disabled = false;
+        });
+    });
+  }
 })();

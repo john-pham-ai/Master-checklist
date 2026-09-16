@@ -13,7 +13,13 @@
 <div class="card" style="max-width:640px;margin:2rem auto;">
   <p>Confluence page created: <a href="{{.PageURL}}" target="_blank" rel="noopener">{{.PageURL}}</a></p>
   {{if .FailedUploads}}
-  <p class="status error">Some screenshots/clips failed to upload and are missing from the page: {{range $i, $f := .FailedUploads}}{{if $i}}, {{end}}{{$f}}{{end}}. Everything else on the page was created successfully.</p>
+  <p class="status error" id="failed-uploads-warning">Some screenshots/clips failed to upload and are missing from the page: {{range $i, $f := .FailedUploads}}{{if $i}}, {{end}}{{$f}}{{end}}. Everything else on the page was created successfully.</p>
+  {{if .RetryID}}
+  <p>
+    <button type="button" id="retry-uploads-btn" data-retry-id="{{.RetryID}}" data-i18n="confirm_retry_uploads">Retry upload</button>
+    <span id="retry-uploads-status" class="muted small" hidden></span>
+  </p>
+  {{end}}
   {{end}}
   {{if .EmptyUploads}}
   <p class="status error">These attachments arrived with no content and were not attached (usually the browser lost them while the tab was open — re-add them to a comment or edit the page): {{range $i, $f := .EmptyUploads}}{{if $i}}, {{end}}{{$f}}{{end}}. Everything else on the page was created successfully.</p>

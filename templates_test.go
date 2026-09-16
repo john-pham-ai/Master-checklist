@@ -81,7 +81,8 @@ func TestTemplatesExecute(t *testing.T) {
 		AssetVersion   string
 		FailedUploads  []string
 		EmptyUploads   []string
-	}{PageURL: "https://x/page", GatekeeperURL: gatekeeperURL, ShowGatekeeper: true, AssetVersion: assetVersion, FailedUploads: []string{"syscheck-clip-1.webm"}, EmptyUploads: []string{"broken.png"}}); err != nil {
+		RetryID        string
+	}{PageURL: "https://x/page", GatekeeperURL: gatekeeperURL, ShowGatekeeper: true, AssetVersion: assetVersion, FailedUploads: []string{"syscheck-clip-1.webm"}, EmptyUploads: []string{"broken.png"}, RetryID: "retry-abc"}); err != nil {
 		t.Fatalf("confirm template: %v", err)
 	}
 	confirmHTML := buf.String()
@@ -92,6 +93,29 @@ func TestTemplatesExecute(t *testing.T) {
 		if !strings.Contains(confirmHTML, want) {
 			t.Errorf("confirm template missing %q (upload warnings)", want)
 		}
+	}
+	// The failed-uploads warning offers a Retry button when the server held
+	// the files.
+	if !strings.Contains(confirmHTML, `id="retry-uploads-btn" data-retry-id="retry-abc"`) {
+		t.Errorf("confirm template missing retry button:\n%s", confirmHTML)
+	}
+
+	// Without a RetryID (files too big to hold) the warning stays but the
+	// button must not render.
+	buf.Reset()
+	if err := confirmTemplate.Execute(&buf, struct {
+		PageURL        string
+		GatekeeperURL  string
+		ShowGatekeeper bool
+		AssetVersion   string
+		FailedUploads  []string
+		EmptyUploads   []string
+		RetryID        string
+	}{PageURL: "https://x/page", GatekeeperURL: gatekeeperURL, ShowGatekeeper: true, AssetVersion: assetVersion, FailedUploads: []string{"syscheck-clip-1.webm"}}); err != nil {
+		t.Fatalf("confirm template (no retry): %v", err)
+	}
+	if strings.Contains(buf.String(), "retry-uploads-btn") {
+		t.Errorf("retry button rendered without a RetryID")
 	}
 
 	buf.Reset()
