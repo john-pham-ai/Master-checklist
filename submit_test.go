@@ -117,6 +117,40 @@ func TestCollectMediaSkipsEmptyPartsAndNumbersContiguously(t *testing.T) {
 	}
 }
 
+func TestCollectManeuvers(t *testing.T) {
+	r := multipartSubmit(t,
+		map[string]string{
+			"closed_loop":                          "on",
+			"cl_maneuver_cut_in":                   "on",
+			"cl_maneuver_result_cut_in":            "comfortable",
+			"cl_maneuver_stop_lead_vehicle":        "on",
+			"cl_maneuver_result_stop_lead_vehicle": "too_late",
+			"cl_maneuver_notes_stop_lead_vehicle":  "braked hard at 15 m",
+			// lane_change NOT ticked, but a stale outcome was posted anyway
+			// (e.g. a tampered form): it must be dropped with the maneuver.
+			"cl_maneuver_result_lane_change": "jerky",
+		}, nil)
+
+	got := collectManeuvers(r)
+	if len(got) != 2 {
+		t.Fatalf("got %d maneuvers, want 2 (only ticked ones): %+v", len(got), got)
+	}
+	// Order follows closedLoopManeuvers, not form order.
+	if got[0].Key != "cut_in" || got[0].Label != "Cut in" || got[0].Outcome != "comfortable" || got[0].Notes != "" {
+		t.Errorf("got[0] = %+v", got[0])
+	}
+	if got[1].Key != "stop_lead_vehicle" || got[1].Outcome != "too_late" || got[1].Notes != "braked hard at 15 m" {
+		t.Errorf("got[1] = %+v", got[1])
+	}
+}
+
+func TestCollectManeuversNoneTicked(t *testing.T) {
+	r := multipartSubmit(t, map[string]string{"closed_loop": "on"}, nil)
+	if got := collectManeuvers(r); len(got) != 0 {
+		t.Errorf("got %+v, want none", got)
+	}
+}
+
 func TestCollectChecksPropagatesEmptyParts(t *testing.T) {
 	r := multipartSubmit(t,
 		map[string]string{

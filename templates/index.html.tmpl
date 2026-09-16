@@ -192,10 +192,6 @@
         <span class="truck-status muted small" hidden></span>
       </label>
       <label>
-        <span data-i18n="field_closed_loop_maneuvers">Maneuvers</span>
-        <input type="text" name="closed_loop_maneuvers">
-      </label>
-      <label>
         <span data-i18n="field_closed_loop_route">Route used</span>
         <input type="text" name="closed_loop_route">
       </label>
@@ -204,6 +200,26 @@
         <a href="https://drive.google.com/drive/folders/0AA2bNJa-T_ApUk9PVA" target="_blank" rel="noopener" class="field-hint" data-i18n="drive_folder_hint">Shared Drive folder</a>
         <input type="url" name="closed_loop_recording" placeholder="https://drive.google.com/...">
       </label>
+    </div>
+    <div class="maneuvers">
+      <h3 data-i18n="field_closed_loop_maneuvers">Maneuvers</h3>
+      <p class="muted small" data-i18n="maneuvers_hint">Tick each maneuver that was tested. Pick an outcome below it only if you saw something — stopped too late, too jerky, or unable to complete. No outcome picked = nothing notable.</p>
+      {{range .Maneuvers}}
+      <div class="maneuver" data-maneuver="{{.Key}}">
+        <label class="maneuver-toggle">
+          <input type="checkbox" name="cl_maneuver_{{.Key}}" value="on" class="maneuver-check">
+          <span data-i18n="maneuver_{{.Key}}">{{.Label}}</span>
+        </label>
+        <div class="maneuver-detail" hidden>
+          <span class="outcome-buttons" role="radiogroup">
+            {{$key := .Key}}{{range $.ManeuverOutcomes}}
+            <label class="outcome outcome-{{.Key}}"><input type="radio" name="cl_maneuver_result_{{$key}}" value="{{.Key}}"><span data-i18n="outcome_{{.Key}}">{{.Label}}</span></label>
+            {{end}}
+          </span>
+          <input type="text" name="cl_maneuver_notes_{{.Key}}" class="notes" data-i18n-placeholder="notes_placeholder" placeholder="Notes">
+        </div>
+      </div>
+      {{end}}
     </div>
     <div id="closed-loop-approval" class="approval-subsection" hidden>
       <h3 data-i18n="section_closed_loop_approval">Master Closed Loop GO Approval (Slack)</h3>
@@ -259,6 +275,11 @@
     <p><strong data-i18n="check_help_verify_label">How to verify:</strong> <span data-i18n="check_{{.Key}}_verify">{{.Verify}}</span></p>
     <p><strong data-i18n="check_help_pass_label">Pass:</strong> <span data-i18n="check_{{.Key}}_pass">{{.Pass}}</span></p>
     <p><strong data-i18n="check_help_fail_label">Fail:</strong> <span data-i18n="check_{{.Key}}_fail">{{.Fail}}</span></p>
+    {{if .Example}}
+    <p><strong data-i18n="check_help_example_label">Example:</strong></p>
+    <a href="/static/{{.Example}}" target="_blank" rel="noopener" class="check-example-link"><img class="check-example" src="/static/{{.Example}}" alt="Example of what a passing {{.Label}} check looks like" loading="lazy"></a>
+    <p class="muted small" data-i18n="check_help_example_hint">Click the image to open it full size.</p>
+    {{end}}
   </details>
   <div class="check-media" data-check-key="{{.Key}}">
     <div class="check-media-actions">

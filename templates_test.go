@@ -12,6 +12,7 @@ func TestTemplatesExecute(t *testing.T) {
 	var buf bytes.Buffer
 	if err := pageTemplate.Execute(&buf, formData{
 		PreflightChecks: preflightChecks, EngagementChecks: engagementChecks, DisengagementChecks: disengagementChecks,
+		Maneuvers: closedLoopManeuvers, ManeuverOutcomes: closedLoopOutcomes,
 		Today: "2026-09-02", GithubURL: githubURL, CurrentEngineer: "John Pham",
 		Vehicles: parseVehicleRange(defaultVehicleRange), AssetVersion: assetVersion,
 	}); err != nil {
@@ -42,6 +43,14 @@ func TestTemplatesExecute(t *testing.T) {
 		`name="closed_loop_approval_link"`, `name="closed_loop_approval_message"`,
 		`id="copy-approval-link-btn"`, `id="fetch-approval-message-btn"`,
 		`data-i18n="section_closed_loop_approval"`,
+		// Closed loop maneuvers: one checkbox per maneuver, four outcome
+		// buttons and a notes field under each.
+		`name="cl_maneuver_cut_in"`, `name="cl_maneuver_lane_change"`, `name="cl_maneuver_stop_lead_vehicle"`,
+		`name="cl_maneuver_result_cut_in" value="comfortable"`, `name="cl_maneuver_result_cut_in" value="too_late"`,
+		`name="cl_maneuver_result_cut_in" value="unable"`, `name="cl_maneuver_result_cut_in" value="jerky"`,
+		`name="cl_maneuver_notes_stop_lead_vehicle"`,
+		// The Lichtblick check ships a reference screenshot in its help.
+		`src="/static/img/lichtblick-sensor-validation.jpg"`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("index template missing %q", want)
@@ -49,6 +58,19 @@ func TestTemplatesExecute(t *testing.T) {
 	}
 	if n := strings.Count(html, `data-i18n="truck_setup_btn"`); n != 1 {
 		t.Errorf("truck_setup_btn rendered %d times, want exactly 1 (the setup card only)", n)
+	}
+	// The free-text Maneuvers input was replaced by the checkbox list.
+	if strings.Contains(html, `name="closed_loop_maneuvers"`) {
+		t.Errorf("legacy closed_loop_maneuvers text input still rendered")
+	}
+	// Only the Lichtblick check has an example image; exactly one is rendered.
+	if n := strings.Count(html, `class="check-example"`); n != 1 {
+		t.Errorf("check-example rendered %d times, want exactly 1", n)
+	}
+	// The example image must actually be embedded, or the page shows a
+	// broken image.
+	if _, err := staticFS.ReadFile("static/img/lichtblick-sensor-validation.jpg"); err != nil {
+		t.Errorf("example screenshot not embedded: %v", err)
 	}
 
 	buf.Reset()

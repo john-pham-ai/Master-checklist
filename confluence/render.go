@@ -205,9 +205,9 @@ func simpleSentence(key string, n int) string {
 type ClosedLoop struct {
 	Enabled   bool
 	RunID     string
-	Maneuvers string // maneuvers tested in the closed loop run
-	Route     string // route used for the closed loop run
-	Recording string // Google Drive link to the closed loop recording
+	Maneuvers []Maneuver // maneuvers ticked on the form, with how the truck handled each
+	Route     string     // route used for the closed loop run
+	Recording string     // Google Drive link to the closed loop recording
 
 	// Master-only GO approval: the Slack permalink of the approval message
 	// and the message text itself (pasted or fetched from Slack on the form).
@@ -215,6 +215,45 @@ type ClosedLoop struct {
 	ApprovalMessage string
 
 	Checks []CheckResult
+}
+
+// Maneuver is one closed loop maneuver the tester ticked, with the outcome
+// button they picked ("comfortable" | "too_late" | "unable" | "jerky", or ""
+// when none was picked) and free-text notes.
+type Maneuver struct {
+	Key     string
+	Label   string
+	Outcome string
+	Notes   string
+}
+
+// maneuverOutcomeCell renders the Outcome cell of one maneuver row. An empty
+// outcome (nothing notable was seen) stays a plain dash — badges are for
+// flagging what the tester actually observed.
+func maneuverOutcomeCell(outcome string) string {
+	if outcome == "" {
+		return "&mdash;"
+	}
+	return outcomeBadge(outcome)
+}
+
+// outcomeBadge renders a maneuver outcome as a coloured Confluence status
+// lozenge, mirroring the button colours on the form.
+func outcomeBadge(outcome string) string {
+	var colour, title string
+	switch outcome {
+	case "comfortable":
+		colour, title = "Green", "STOPPED COMFORTABLY"
+	case "too_late":
+		colour, title = "Yellow", "STOPPED TOO LATE"
+	case "unable":
+		colour, title = "Red", "UNABLE TO COMPLETE"
+	case "jerky":
+		colour, title = "Yellow", "TOO JERKY"
+	default:
+		colour, title = "Grey", "NOT RATED"
+	}
+	return fmt.Sprintf(`<ac:structured-macro ac:name="status"><ac:parameter ac:name="colour">%s</ac:parameter><ac:parameter ac:name="title">%s</ac:parameter></ac:structured-macro>`, colour, title)
 }
 
 // RunReport holds everything submitted from the form for one smoke test run.
@@ -707,7 +746,6 @@ func renderClosedLoop(b *strings.Builder, cl ClosedLoop) {
 	b.WriteString("<h2>Closed Loop</h2>\n")
 	b.WriteString("<table><tbody>\n")
 	fmt.Fprintf(b, "<tr><th>Run ID</th><td>%s</td></tr>\n", esc(cl.RunID))
-	fmt.Fprintf(b, "<tr><th>Maneuvers</th><td>%s</td></tr>\n", esc(cl.Maneuvers))
 	fmt.Fprintf(b, "<tr><th>Route Used</th><td>%s</td></tr>\n", esc(cl.Route))
 	if cl.Recording != "" {
 		fmt.Fprintf(b, "<tr><th>Recording</th><td><a href=\"%s\">%s</a></td></tr>\n", esc(cl.Recording), esc(cl.Recording))
@@ -722,6 +760,16 @@ func renderClosedLoop(b *strings.Builder, cl ClosedLoop) {
 	b.WriteString("</tbody></table>\n")
 	if cl.ApprovalMessage != "" {
 		b.WriteString("<p><strong>GO approval message</strong></p>\n<blockquote>" + slackToHTML(cl.ApprovalMessage) + "</blockquote>\n")
+	}
+	b.WriteString("<p><strong>Maneuvers</strong></p>\n")
+	if len(cl.Maneuvers) == 0 {
+		b.WriteString("<p>No maneuvers ticked.</p>\n")
+	} else {
+		b.WriteString("<table><thead><tr><th>Maneuver</th><th>Outcome</th><th>Notes</th></tr></thead><tbody>\n")
+		for _, m := range cl.Maneuvers {
+			fmt.Fprintf(b, "<tr><td>%s</td><td>%s</td><td>%s</td></tr>\n", esc(m.Label), maneuverOutcomeCell(m.Outcome), esc(m.Notes))
+		}
+		b.WriteString("</tbody></table>\n")
 	}
 	if len(cl.Checks) > 0 {
 		b.WriteString("<table><thead><tr><th>Check</th><th>Result</th><th>Notes</th><th>Attachments</th></tr></thead><tbody>\n")

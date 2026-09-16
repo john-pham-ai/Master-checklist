@@ -606,6 +606,23 @@
     applyClosedLoop();
   }
 
+  // ---- Closed Loop maneuvers: each ticked maneuver reveals its outcome
+  // buttons and notes; unticking hides them and clears the picked outcome so
+  // nothing stale is posted for a maneuver that wasn't tested.
+  document.querySelectorAll(".maneuver").forEach((row) => {
+    const check = row.querySelector(".maneuver-check");
+    const detail = row.querySelector(".maneuver-detail");
+    if (!check || !detail) return;
+    const apply = () => {
+      detail.hidden = !check.checked;
+      if (!check.checked) {
+        detail.querySelectorAll('input[type="radio"]').forEach((r) => { r.checked = false; });
+      }
+    };
+    check.addEventListener("change", apply);
+    apply();
+  });
+
   // ---- Master closed loop GO approval: copy the Slack permalink, and
   // optionally fetch the approval message text from Slack (see slack.go).
   // Both buttons live in the approval sub-section, so they only exist when

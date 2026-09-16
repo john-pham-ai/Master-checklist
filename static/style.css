@@ -210,6 +210,35 @@ textarea {
 .diff-flag-inline { color: var(--fail); font-size: 0.85rem; }
 .muted.small.error { color: var(--fail); }
 
+/* ---- Reference screenshot inside a check's "How to verify" help ---- */
+.check-example { display: block; max-width: 100%; border: 1px solid var(--border); border-radius: 6px; margin: 0.3rem 0; }
+.check-example-link:hover .check-example { border-color: var(--accent); }
+
+/* ---- Closed Loop maneuvers: tick a maneuver, then pick its outcome ---- */
+.maneuvers { margin-top: 1rem; padding-top: 0.8rem; border-top: 1px dashed var(--border); }
+.maneuvers h3 { margin: 0 0 0.3rem; font-size: 0.95rem; color: var(--text); }
+.maneuvers > p { margin: 0 0 0.6rem; }
+.maneuver { padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+.maneuver:last-child { border-bottom: none; }
+.maneuver-toggle { display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; cursor: pointer; }
+.maneuver-toggle input[type="checkbox"] { width: 1rem; height: 1rem; accent-color: var(--accent); }
+.maneuver-detail { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0.5rem 0 0 1.5rem; }
+.maneuver-detail[hidden] { display: none; }
+.outcome-buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.outcome { position: relative; }
+.outcome input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.outcome span {
+  display: inline-block; padding: 0.35rem 0.7rem; border-radius: 999px; font-size: 0.85rem; cursor: pointer;
+  border: 1px solid var(--border); color: var(--text); background: var(--card-bg); transition: border-color 0.1s, background 0.1s;
+}
+.outcome span:hover { border-color: var(--accent); }
+.outcome input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.outcome-comfortable input:checked + span { background: var(--pass); border-color: var(--pass); color: #fff; }
+.outcome-too_late input:checked + span,
+.outcome-jerky input:checked + span { background: #d9a400; border-color: #d9a400; color: #1a1c20; }
+.outcome-unable input:checked + span { background: var(--fail); border-color: var(--fail); color: #fff; }
+.maneuver-detail .notes { flex: 1 1 200px; }
+
 /* ---- Master closed loop GO approval (sub-section of the Closed Loop card,
    shown only for Master Testing with the Closed Loop toggle on) ---- */
 .approval-subsection { margin-top: 1rem; padding-top: 0.8rem; border-top: 1px dashed var(--border); }
@@ -278,6 +307,11 @@ footer a { color: var(--accent); text-decoration: none; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.media-item-broken { border-color: var(--fail); }
+.media-item-broken .media-thumb { opacity: 0.35; }
+.media-item-broken .media-name { color: var(--fail); }
+.media-replace { font-size: 0.75rem; padding: 0.2rem 0.5rem; }
+
 .media-remove {
   position: absolute;
   top: -0.5rem;

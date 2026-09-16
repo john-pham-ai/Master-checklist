@@ -86,75 +86,80 @@ type checkSpec struct {
 	Verify string // how to perform this check
 	Pass   string // what a pass looks like
 	Fail   string // what a fail looks like
+	// Example is an optional path (under /static/) to a reference screenshot
+	// shown inside the check's "How to verify" help, e.g. what the Lichtblick
+	// camera grid should look like.
+	Example string
 }
 
 var preflightChecks = []checkSpec{
-	{"syscheck", "run_syscheck results",
-		"Run `run_syscheck` on the vehicle and review its output in the terminal or log.",
-		"All subsystems report OK/green with no errors or warnings flagged.",
-		"Any subsystem reports an error, a timeout, or is missing from the output."},
-	{"timesync", "check_timesync results",
-		"Run `check_timesync` and review the reported clock offset for every ECU/sensor.",
-		"All components report a synchronized clock within the tool's tolerance threshold.",
-		"Any component reports clock drift beyond tolerance, or fails to report at all."},
-	{"build_launch", "Software build and launch",
-		"Confirm the target build is flashed and the AD stack launches cleanly; check the launch logs and process list.",
-		"The running build matches the intended Tag/commit hash and every process starts with no crash or restart loop.",
-		"The build does not match the intended Tag/commit hash, or any process crashes or fails to launch."},
-	{"health_monitor", "Health monitor is healthy",
-		"Open the health monitor dashboard and observe system status at idle and during a short drive.",
-		"Every component shows healthy/green status for the whole check with no persistent warnings or errors.",
-		"Any component shows a persistent warning or error, or drops out during the check."},
-	{"logs_recording", "Logs recording in /media/hotswap1/frontier/",
-		"After a short drive, check /media/hotswap1/frontier/ for log files created during this run.",
-		"New log files appear, are actively growing in size, and their timestamps match the run.",
-		"No new log files appear, files are empty or truncated, or timestamps don't match the run."},
+	{Key: "syscheck", Label: "run_syscheck results",
+		Verify: "Run `run_syscheck` on the vehicle and review its output in the terminal or log.",
+		Pass:   "All subsystems report OK/green with no errors or warnings flagged.",
+		Fail:   "Any subsystem reports an error, a timeout, or is missing from the output."},
+	{Key: "timesync", Label: "check_timesync results",
+		Verify: "Run `check_timesync` and review the reported clock offset for every ECU/sensor.",
+		Pass:   "All components report a synchronized clock within the tool's tolerance threshold.",
+		Fail:   "Any component reports clock drift beyond tolerance, or fails to report at all."},
+	{Key: "build_launch", Label: "Software build and launch",
+		Verify: "Confirm the target build is flashed and the AD stack launches cleanly; check the launch logs and process list.",
+		Pass:   "The running build matches the intended Tag/commit hash and every process starts with no crash or restart loop.",
+		Fail:   "The build does not match the intended Tag/commit hash, or any process crashes or fails to launch."},
+	{Key: "health_monitor", Label: "Health monitor is healthy",
+		Verify: "Open the health monitor dashboard and observe system status at idle and during a short drive.",
+		Pass:   "Every component shows healthy/green status for the whole check with no persistent warnings or errors.",
+		Fail:   "Any component shows a persistent warning or error, or drops out during the check."},
+	{Key: "logs_recording", Label: "Logs recording in /media/hotswap1/frontier/",
+		Verify: "After a short drive, check /media/hotswap1/frontier/ for log files created during this run.",
+		Pass:   "New log files appear, are actively growing in size, and their timestamps match the run.",
+		Fail:   "No new log files appear, files are empty or truncated, or timestamps don't match the run."},
 }
 
 var engagementChecks = []checkSpec{
-	{"engagement", "Engagement checks",
-		"Engage autonomy mode using the standard procedure and observe the takeover.",
-		"AD engages on the first attempt, the correct indicators/alerts fire, and control transitions cleanly to the vehicle.",
-		"Engagement fails, needs multiple attempts, throws an error, or the control transition is abrupt or unsafe."},
-	{"lichtblick_cameras", "Lichtblick: cameras in the Sensors validation tab",
-		"Open Lichtblick, go to the Sensors validation tab, and confirm every camera is displaying properly.",
-		"All cameras show a live, correctly oriented image with no freezes, black frames, or visual artifacts.",
-		"Any camera is black, frozen, missing, rotated/misaligned, or showing artifacts."},
-	{"health_monitor_nodes", "Health monitor GUI: red nodes",
-		"Open the health monitor GUI and note down whether any nodes are shown red.",
-		"No red nodes — every node reports healthy/OK while AD is engaged.",
-		"One or more nodes are red; note down which nodes in the Notes field."},
+	{Key: "engagement", Label: "Engagement checks",
+		Verify: "Engage autonomy mode using the standard procedure and observe the takeover.",
+		Pass:   "AD engages on the first attempt, the correct indicators/alerts fire, and control transitions cleanly to the vehicle.",
+		Fail:   "Engagement fails, needs multiple attempts, throws an error, or the control transition is abrupt or unsafe."},
+	{Key: "lichtblick_cameras", Label: "Lichtblick: cameras in the Sensors validation tab",
+		Verify:  "Open Lichtblick, go to the Sensors Validation tab, then Cameras → Cameras Raw, and confirm every camera tile is displaying properly (see the example below).",
+		Pass:    "All camera tiles show a live, correctly oriented image with no freezes, black tiles, or visual artifacts.",
+		Fail:    "Any camera tile is black, frozen, missing, rotated/misaligned, or showing artifacts.",
+		Example: "img/lichtblick-sensor-validation.jpg"},
+	{Key: "health_monitor_nodes", Label: "Health monitor GUI: red nodes",
+		Verify: "Open the health monitor GUI and note down whether any nodes are shown red.",
+		Pass:   "No red nodes — every node reports healthy/OK while AD is engaged.",
+		Fail:   "One or more nodes are red; note down which nodes in the Notes field."},
 }
 
 var disengagementChecks = []checkSpec{
-	{"steering_left", "Disengagement: steering left",
-		"With AD engaged, turn the steering wheel left with enough force to trigger a disengagement.",
-		"AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
-		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
-	{"steering_right", "Disengagement: steering right",
-		"With AD engaged, turn the steering wheel right with enough force to trigger a disengagement.",
-		"AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
-		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
-	{"accel", "Disengagement: accel",
-		"With AD engaged, press the accelerator pedal to trigger a disengagement.",
-		"AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
-		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
-	{"brake", "Disengagement: brake",
-		"With AD engaged, press the brake pedal to trigger a disengagement.",
-		"AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
-		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
-	{"cruise_control", "Disengagement: cruise control",
-		"With AD engaged, tap the cruise control stalk/button to trigger a disengagement.",
-		"AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
-		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
-	{"e_stop", "Disengagement: e-stop",
-		"With AD engaged, activate the e-stop to trigger a disengagement.",
-		"The vehicle disengages and comes to a safe stop immediately, with the correct alert/indicator.",
-		"The e-stop does not disengage AD, the stop is delayed, or the vehicle does not come to a safe stop."},
-	{"ad_md_button", "Disengagement: AD/MD button",
-		"With AD engaged, press the AD/MD button to trigger a disengagement.",
-		"AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
-		"AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
+	{Key: "steering_left", Label: "Disengagement: steering left",
+		Verify: "With AD engaged, turn the steering wheel left with enough force to trigger a disengagement.",
+		Pass:   "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+		Fail:   "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
+	{Key: "steering_right", Label: "Disengagement: steering right",
+		Verify: "With AD engaged, turn the steering wheel right with enough force to trigger a disengagement.",
+		Pass:   "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+		Fail:   "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
+	{Key: "accel", Label: "Disengagement: accel",
+		Verify: "With AD engaged, press the accelerator pedal to trigger a disengagement.",
+		Pass:   "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+		Fail:   "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
+	{Key: "brake", Label: "Disengagement: brake",
+		Verify: "With AD engaged, press the brake pedal to trigger a disengagement.",
+		Pass:   "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+		Fail:   "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
+	{Key: "cruise_control", Label: "Disengagement: cruise control",
+		Verify: "With AD engaged, tap the cruise control stalk/button to trigger a disengagement.",
+		Pass:   "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+		Fail:   "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
+	{Key: "e_stop", Label: "Disengagement: e-stop",
+		Verify: "With AD engaged, activate the e-stop to trigger a disengagement.",
+		Pass:   "The vehicle disengages and comes to a safe stop immediately, with the correct alert/indicator.",
+		Fail:   "The e-stop does not disengage AD, the stop is delayed, or the vehicle does not come to a safe stop."},
+	{Key: "ad_md_button", Label: "Disengagement: AD/MD button",
+		Verify: "With AD engaged, press the AD/MD button to trigger a disengagement.",
+		Pass:   "AD disengages immediately with the correct alert/indicator, and the safety driver has full manual control.",
+		Fail:   "AD does not disengage, disengages with a noticeable delay, or manual control is not fully restored."},
 }
 
 // closedLoopChecks are the pass/fail line items of the optional Closed Loop
@@ -163,11 +168,58 @@ var disengagementChecks = []checkSpec{
 // checks.
 var closedLoopChecks = []checkSpec{}
 
+// labeled is a {Key, Label} pair used for the closed loop maneuver list and
+// its outcome buttons. Label is the English fallback rendered into the page;
+// i18n keys "maneuver_<Key>" / "outcome_<Key>" translate it.
+type labeled struct {
+	Key   string
+	Label string
+}
+
+// closedLoopManeuvers are the maneuvers a tester can tick off in the Closed
+// Loop section. Each ticked one gets an outcome (closedLoopOutcomes) and notes.
+var closedLoopManeuvers = []labeled{
+	{"cut_in", "Cut in"},
+	{"lane_change", "Lane change"},
+	{"stop_lead_vehicle", "Stopping for lead vehicle"},
+}
+
+// closedLoopOutcomes are the possible results of one maneuver, shown as
+// buttons under each ticked maneuver.
+var closedLoopOutcomes = []labeled{
+	{"comfortable", "Stopped comfortably"},
+	{"too_late", "Stopped too late"},
+	{"unable", "Unable to complete maneuver"},
+	{"jerky", "Too jerky"},
+}
+
+// collectManeuvers reads the ticked maneuvers (cl_maneuver_<key>) with their
+// outcome (cl_maneuver_result_<key>) and notes (cl_maneuver_notes_<key>).
+// Unticked maneuvers are left out entirely — the page only lists what was
+// actually tested.
+func collectManeuvers(r *http.Request) []confluence.Maneuver {
+	var out []confluence.Maneuver
+	for _, m := range closedLoopManeuvers {
+		if r.FormValue("cl_maneuver_"+m.Key) == "" {
+			continue
+		}
+		out = append(out, confluence.Maneuver{
+			Key:     m.Key,
+			Label:   m.Label,
+			Outcome: r.FormValue("cl_maneuver_result_" + m.Key),
+			Notes:   r.FormValue("cl_maneuver_notes_" + m.Key),
+		})
+	}
+	return out
+}
+
 type formData struct {
 	PreflightChecks     []checkSpec
 	EngagementChecks    []checkSpec
 	DisengagementChecks []checkSpec
 	ClosedLoopChecks    []checkSpec
+	Maneuvers           []labeled // closed loop maneuver checkboxes
+	ManeuverOutcomes    []labeled // outcome buttons under each ticked maneuver
 	Today               string
 	GithubURL           string
 	CurrentEngineer     string   // signed-in user's name (from IAP), pre-fills Test Engineer
@@ -184,6 +236,8 @@ func makeIndexHandler(vehicles []string) http.HandlerFunc {
 			EngagementChecks:    engagementChecks,
 			DisengagementChecks: disengagementChecks,
 			ClosedLoopChecks:    closedLoopChecks,
+			Maneuvers:           closedLoopManeuvers,
+			ManeuverOutcomes:    closedLoopOutcomes,
 			Today:               time.Now().Format("2006-01-02"),
 			GithubURL:           githubURL,
 			CurrentEngineer:     currentEngineerName(r),
@@ -364,7 +418,7 @@ func makeSubmitHandler(cfg config) http.HandlerFunc {
 			report.ClosedLoop = confluence.ClosedLoop{
 				Enabled:   true,
 				RunID:     r.FormValue("closed_loop_run_id"),
-				Maneuvers: r.FormValue("closed_loop_maneuvers"),
+				Maneuvers: collectManeuvers(r),
 				Route:     r.FormValue("closed_loop_route"),
 				Recording: r.FormValue("closed_loop_recording"),
 				Checks:    closedLoopResults,

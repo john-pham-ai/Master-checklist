@@ -92,6 +92,56 @@ func TestRenderClosedLoopWithoutApproval(t *testing.T) {
 	}
 }
 
+func TestRenderClosedLoopManeuvers(t *testing.T) {
+	r := RunReport{
+		Tag: "t", Date: "2026-09-16", Vehicle: "810", TestEngineer: "e", CommitHash: "c", RunID: "r",
+		ClosedLoop: ClosedLoop{
+			Enabled: true,
+			Maneuvers: []Maneuver{
+				{Key: "cut_in", Label: "Cut in", Outcome: "comfortable"},
+				{Key: "lane_change", Label: "Lane change", Outcome: "jerky", Notes: "abrupt steering into lane 2 <script>"},
+				{Key: "stop_lead_vehicle", Label: "Stopping for lead vehicle", Outcome: ""},
+			},
+		},
+	}
+	got := RenderStorageFormat(r)
+	for _, want := range []string{
+		"<tr><th>Maneuver</th><th>Outcome</th><th>Notes</th></tr>",
+		"<td>Cut in</td>", `<ac:parameter ac:name="colour">Green</ac:parameter><ac:parameter ac:name="title">STOPPED COMFORTABLY</ac:parameter>`,
+		"<td>Lane change</td>", `<ac:parameter ac:name="colour">Yellow</ac:parameter><ac:parameter ac:name="title">TOO JERKY</ac:parameter>`,
+		"abrupt steering into lane 2 &lt;script&gt;", // notes escaped
+		// Outcomes are optional: nothing picked renders a plain dash, not a badge.
+		"<td>Stopping for lead vehicle</td><td>&mdash;</td>",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered page missing %q", want)
+		}
+	}
+	// The old free-text Maneuvers row is gone.
+	if strings.Contains(got, "<tr><th>Maneuvers</th>") {
+		t.Errorf("legacy free-text Maneuvers row still rendered")
+	}
+}
+
+func TestRenderClosedLoopNoManeuvers(t *testing.T) {
+	r := RunReport{
+		Tag: "t", Date: "2026-09-16", Vehicle: "810", TestEngineer: "e", CommitHash: "c", RunID: "r",
+		ClosedLoop: ClosedLoop{Enabled: true},
+	}
+	got := RenderStorageFormat(r)
+	if !strings.Contains(got, "No maneuvers ticked.") {
+		t.Errorf("rendered page missing the empty-maneuvers note")
+	}
+}
+
+func TestOutcomeBadgeUnknownIsGrey(t *testing.T) {
+	// A tampered/unknown outcome value must not blow up or render raw text.
+	got := outcomeBadge("<b>weird</b>")
+	if !strings.Contains(got, "Grey") || strings.Contains(got, "<b>") {
+		t.Errorf("outcomeBadge(unknown) = %q", got)
+	}
+}
+
 func TestRenderClosedLoopDisabled(t *testing.T) {
 	// No closed loop toggle: no closed loop output at all.
 	r := RunReport{Tag: "t", Date: "2026-09-16", Vehicle: "810", TestEngineer: "e", CommitHash: "c", RunID: "r"}
